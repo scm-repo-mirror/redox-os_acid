@@ -727,6 +727,40 @@ fn pipe_test() -> Result<()> {
     Ok(())
 }*/
 
+fn sleep_granularity_test() -> Result<()> {
+    use std::time::{Duration, Instant};
+    for &sleep in &[
+        Duration::from_micros(1),
+        Duration::from_micros(10),
+        Duration::from_micros(100),
+        Duration::from_millis(1),
+        Duration::from_millis(10),
+        Duration::from_millis(100),
+    ] {
+        let mut min = Duration::default();
+        let mut max = Duration::default();
+        let mut total = Duration::default();
+        let mut times = 0;
+        let mut timer = Instant::now();
+        while timer.elapsed().as_secs() < 10 {
+            let instant = Instant::now();
+            thread::sleep(sleep);
+            let elapsed = instant.elapsed();
+            if times == 0 {
+                min = elapsed;
+                max = elapsed;
+            } else {
+                min = min.min(elapsed);
+                max = max.max(elapsed);
+            }
+            total += elapsed;
+            times += 1;
+        }
+        println!("sleep {:?} times {} min {:?} max {:?} average {:?}", sleep, times, min, max, total / times);
+    }
+    Ok(())
+}
+
 #[cfg(target_arch = "x86_64")]
 fn switch_test() -> Result<()> {
     use x86::time::rdtscp;
@@ -1086,6 +1120,7 @@ fn main() {
     tests.insert("create_test", create_test);
     tests.insert("channel", channel_test);
     // tests.insert("page_fault", page_fault_test); // TODO
+    tests.insert("sleep_granularity", sleep_granularity_test);
     #[cfg(target_arch = "x86_64")]
     tests.insert("switch", switch_test);
     tests.insert("tcp_fin", tcp_fin_test);
