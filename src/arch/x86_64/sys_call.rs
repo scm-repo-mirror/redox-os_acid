@@ -3,6 +3,8 @@ use std::io::BufWriter;
 use std::os::unix::thread::JoinHandleExt;
 use std::thread;
 
+// Crate named sys_call to avoid confusion with redox_syscall
+
 pub fn invalid_syscall() {
     // TODO: Support deeper syscalls, like reading O_NONBLOCK from an empty pipe.
     unsafe {

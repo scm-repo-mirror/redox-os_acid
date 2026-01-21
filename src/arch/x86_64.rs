@@ -1,8 +1,8 @@
 
 mod avx;
 mod redoxfs;
-mod syscall;
+mod sys_call;
 
 pub use avx::*;
 pub use redoxfs::*;
-pub use syscall::*;
+pub use sys_call::*;
