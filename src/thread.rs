@@ -1,3 +1,5 @@
+#![allow(static_mut_refs)]
+
 use std::thread;
 
 pub fn context_switch() {
@@ -16,12 +18,12 @@ pub fn context_switch() {
         i += 1;
     }
 
-    let j = switch_thread.join().unwrap();
+    switch_thread.join().unwrap();
 }
 
 pub fn thread_spawn() {
     // Same loop count with context_switch
-    for i in 1..100 {
+    for _ in 1..100 {
         let mut thread_list = vec![];
         for j in 1..5 {
             thread_list.push(std::thread::spawn(move || outer_runner(j)));
@@ -30,6 +32,22 @@ pub fn thread_spawn() {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
     }
+}
+
+fn outer_runner(threadnum: usize) {
+    // println!("outer_runner {}", threadnum);
+    eprintln!("outer_runner {}", threadnum);
+    inner_runner(threadnum);
+    // println!("outer_runner {} exiting", threadnum);
+    eprintln!("outer_runner {} exiting", threadnum);
+}
+
+fn inner_runner(threadnum: usize) {
+    // println!("start runner {}", threadnum);
+    eprintln!("start runner {}", threadnum);
+    std::thread::sleep(std::time::Duration::from_millis(1));
+    // println!("end runner {}", threadnum);
+    eprintln!("end runner {}", threadnum);
 }
 
 pub fn channel() {
@@ -55,7 +73,7 @@ pub fn channel() {
     }
 }
 
-fn sleep_granularity() {
+pub fn sleep_granularity() {
     use std::time::{Duration, Instant};
     let mut threads = Vec::new();
     for &sleep in &[
@@ -71,7 +89,7 @@ fn sleep_granularity() {
             let mut max = Duration::default();
             let mut total = Duration::default();
             let mut times = 0;
-            let mut timer = Instant::now();
+            let timer = Instant::now();
             while timer.elapsed().as_secs() < 10 {
                 let instant = Instant::now();
                 thread::sleep(sleep);

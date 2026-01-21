@@ -14,13 +14,12 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
 use nix::errno::Errno;
 use nix::sys::signal::{self, SaFlags, SigHandler, SigSet, SigmaskHow, Signal};
 use nix::sys::wait::{self, WaitPidFlag, WaitStatus};
 use nix::unistd::{self, ForkResult, Pid};
 
-pub fn fork_serial_bench<const EXEC: bool>() -> Result<()> {
+pub fn fork_serial_bench<const EXEC: bool>() {
     let now = Instant::now();
 
     for _ in 0..1 << 10 {
@@ -43,9 +42,8 @@ pub fn fork_serial_bench<const EXEC: bool>() -> Result<()> {
     }
 
     println!("TIME: {:?}", now.elapsed());
-    Ok(())
 }
-pub fn fork_tree_bench<const EXEC: bool>() -> Result<()> {
+pub fn fork_tree_bench<const EXEC: bool>() {
     let mut is_parent = true;
     let now = Instant::now();
 
@@ -71,22 +69,22 @@ pub fn fork_tree_bench<const EXEC: bool>() -> Result<()> {
         }
     }
     println!("TIME: {:?}", now.elapsed());
-    Ok(())
 }
 
-pub fn reparenting() -> Result<()> {
+pub fn reparenting() {
     // Check that all children of a process are reparented to init, regardless of session or proc
     // group.
 
-    match unsafe { unistd::fork()? } {
+    match unsafe { unistd::fork().unwrap() } {
         ForkResult::Child => (),
         ForkResult::Parent {
             child: child_parent,
         } => {
             thread::sleep(Duration::from_millis(100));
-            signal::kill(child_parent, Signal::SIGTERM)?;
+            signal::kill(child_parent, Signal::SIGTERM).unwrap();
 
-            let res = wait::waitpid(None, Some(WaitPidFlag::WUNTRACED | WaitPidFlag::WCONTINUED))?;
+            let res = wait::waitpid(None, Some(WaitPidFlag::WUNTRACED | WaitPidFlag::WCONTINUED))
+                .unwrap();
             // TODO: check returned signal?
             assert!(matches!(res, WaitStatus::Exited(c, _) if c == child_parent));
 
@@ -95,20 +93,18 @@ pub fn reparenting() -> Result<()> {
         }
     }
 
-    let ForkResult::Parent { .. } = (unsafe { unistd::fork()? }) else {
+    let ForkResult::Parent { .. } = (unsafe { unistd::fork().unwrap() }) else {
         // first child waits forever (a long time)
         unistd::setpgid(Pid::this(), Pid::this()).unwrap();
         thread::sleep(Duration::MAX);
         std::process::exit(42);
     };
-    let ForkResult::Parent { .. } = (unsafe { unistd::fork()? }) else {
+    let ForkResult::Parent { .. } = (unsafe { unistd::fork().unwrap() }) else {
         unistd::setsid().unwrap();
         thread::sleep(Duration::MAX);
         std::process::exit(1337);
     };
     // TODO: Check that init killed them?
-
-    Ok(())
 }
 
 // TODO: add to the nix and libc crates
@@ -116,21 +112,21 @@ extern "C" {
     fn getsid(pid: libc::pid_t) -> libc::pid_t;
 }
 
-pub fn setsid() -> Result<()> {
+pub fn setsid() {
     // Create two processes in the same group.
     let orig_sid = Pid::from_raw(unsafe { getsid(0) });
     assert_ne!(orig_sid.as_raw(), -1);
 
     let parent = unistd::getpid();
     assert_eq!(unistd::setpgid(parent, parent), Ok(()));
-    assert_eq!(unistd::getpgid(None)?, parent);
+    assert_eq!(unistd::getpgid(None).unwrap(), parent);
     assert_eq!(unistd::getpgid(Some(parent)), Ok(parent));
 
-    let ForkResult::Parent { child } = (unsafe { unistd::fork()? }) else {
+    let ForkResult::Parent { child } = (unsafe { unistd::fork().unwrap() }) else {
         thread::sleep(Duration::from_millis(100));
-        let new_sid = unistd::setsid()?;
+        let new_sid = unistd::setsid().unwrap();
         assert_eq!(new_sid, unistd::getpid());
-        assert_eq!(unistd::getpgid(None)?, new_sid);
+        assert_eq!(unistd::getpgid(None).unwrap(), new_sid);
         thread::sleep(Duration::MAX);
         std::process::exit(0);
     };
@@ -146,16 +142,15 @@ pub fn setsid() -> Result<()> {
     assert_eq!(unsafe { getsid(parent.as_raw()) }, orig_sid.as_raw());
     assert_eq!(unsafe { getsid(child.as_raw()) }, child.as_raw());
 
-    signal::kill(child, Signal::SIGTERM)?;
+    signal::kill(child, Signal::SIGTERM).unwrap();
 
     assert_eq!(
-        wait::waitpid(child, Some(WaitPidFlag::empty()))?,
+        wait::waitpid(child, Some(WaitPidFlag::empty())).unwrap(),
         WaitStatus::Signaled(child, Signal::SIGTERM, false)
     );
-    Ok(())
 }
 
-pub fn setpgid() -> Result<()> {
+pub fn setpgid() {
     #[derive(Debug)]
     enum Case {
         SessionLeader,
@@ -166,21 +161,21 @@ pub fn setpgid() -> Result<()> {
         SetFromChild,
     }
 
-    fn inner(case: Case) -> Result<()> {
+    fn inner(case: Case) {
         println!("Testing setpgid case {case:?}");
-        if let ForkResult::Parent { child: wrapper } = unsafe { unistd::fork()? } {
+        if let ForkResult::Parent { child: wrapper } = unsafe { unistd::fork().unwrap() } {
             assert_eq!(
-                wait::waitpid(wrapper, Some(WaitPidFlag::empty()))?,
+                wait::waitpid(wrapper, Some(WaitPidFlag::empty())).unwrap(),
                 WaitStatus::Exited(wrapper, 0)
             );
-            return Ok(());
+            return;
         }
 
         let parent = unistd::getpid();
 
         match case {
             Case::SessionLeader => {
-                unistd::setsid()?;
+                unistd::setsid().unwrap();
                 // is a session leader (even though it would have been a no-op anyway)
                 assert_eq!(unistd::setpgid(parent, parent), Err(Errno::EPERM));
                 std::process::exit(0);
@@ -188,14 +183,14 @@ pub fn setpgid() -> Result<()> {
             _ => (),
         }
 
-        let ForkResult::Parent { child } = (unsafe { unistd::fork()? }) else {
+        let ForkResult::Parent { child } = (unsafe { unistd::fork().unwrap() }) else {
             let child = unistd::getpid();
             match case {
                 Case::DifferentSession => {
-                    unistd::setsid()?;
+                    unistd::setsid().unwrap();
                 }
                 Case::HasRunExec => {
-                    unistd::execv(c"/usr/bin/sleep", &[c"/usr/bin/sleep", c"999999"])?;
+                    unistd::execv(c"/usr/bin/sleep", &[c"/usr/bin/sleep", c"999999"]).unwrap();
                 }
                 Case::SessionLeader => unreachable!(),
                 Case::ModifyParent => {
@@ -205,7 +200,7 @@ pub fn setpgid() -> Result<()> {
                 }
                 Case::NewPgidNotPid => (),
                 Case::SetFromChild => {
-                    unistd::setpgid(child, child)?;
+                    unistd::setpgid(child, child).unwrap();
                 }
             }
             thread::sleep(Duration::MAX);
@@ -215,24 +210,24 @@ pub fn setpgid() -> Result<()> {
         match case {
             Case::HasRunExec => {
                 assert_eq!(unistd::setpgid(child, child), Err(Errno::EACCES));
-                signal::kill(child, Signal::SIGTERM)?;
+                signal::kill(child, Signal::SIGTERM).unwrap();
                 assert_eq!(
-                    wait::waitpid(child, Some(WaitPidFlag::empty()))?,
+                    wait::waitpid(child, Some(WaitPidFlag::empty())).unwrap(),
                     WaitStatus::Signaled(child, Signal::SIGTERM, false)
                 );
             }
             Case::SessionLeader => unreachable!(),
             Case::ModifyParent => {
                 assert_eq!(
-                    wait::waitpid(child, Some(WaitPidFlag::empty()))?,
+                    wait::waitpid(child, Some(WaitPidFlag::empty())).unwrap(),
                     WaitStatus::Exited(child, 0)
                 );
             }
             Case::DifferentSession => {
                 assert_eq!(unistd::setpgid(child, child), Err(Errno::EPERM));
-                signal::kill(child, Signal::SIGTERM)?;
+                signal::kill(child, Signal::SIGTERM).unwrap();
                 assert_eq!(
-                    wait::waitpid(child, Some(WaitPidFlag::empty()))?,
+                    wait::waitpid(child, Some(WaitPidFlag::empty())).unwrap(),
                     WaitStatus::Signaled(child, Signal::SIGTERM, false)
                 );
             }
@@ -242,19 +237,19 @@ pub fn setpgid() -> Result<()> {
 
                 // allowed
                 assert_eq!(unistd::setpgid(child, child), Ok(()));
-                assert_eq!(unistd::getpgid(Some(child))?, child);
+                assert_eq!(unistd::getpgid(Some(child)).unwrap(), child);
 
-                signal::kill(child, Signal::SIGTERM)?;
+                signal::kill(child, Signal::SIGTERM).unwrap();
                 assert_eq!(
-                    wait::waitpid(child, Some(WaitPidFlag::empty()))?,
+                    wait::waitpid(child, Some(WaitPidFlag::empty())).unwrap(),
                     WaitStatus::Signaled(child, Signal::SIGTERM, false)
                 );
             }
             Case::SetFromChild => {
-                assert_eq!(unistd::getpgid(Some(child))?, child);
-                signal::kill(child, Signal::SIGTERM)?;
+                assert_eq!(unistd::getpgid(Some(child)).unwrap(), child);
+                signal::kill(child, Signal::SIGTERM).unwrap();
                 assert_eq!(
-                    wait::waitpid(child, Some(WaitPidFlag::empty()))?,
+                    wait::waitpid(child, Some(WaitPidFlag::empty())).unwrap(),
                     WaitStatus::Signaled(child, Signal::SIGTERM, false)
                 );
             }
@@ -270,94 +265,92 @@ pub fn setpgid() -> Result<()> {
         Case::HasRunExec,
     ];
     for case in cases {
-        inner(case)?;
+        inner(case)
     }
-    Ok(())
 }
 
-pub fn stop_orphan_pgrp() -> Result<()> {
+pub fn stop_orphan_pgrp() {
     #[derive(Debug)]
     enum Case {
         Setsid,    // orphan due to different sid than parent
         SameGrp,   // orphan since parent chain preserves pgid
         Nonorphan, // nonorphan since parent has different pgid
     }
-    unsafe fn inner(sig: Signal, case: Case) -> Result<()> {
+    unsafe fn inner(sig: Signal, case: Case) {
         println!("Testing {sig:?} case {case:?}");
 
         if matches!(case, Case::SameGrp) {
             if unistd::getppid() != Pid::from_raw(1) {
                 eprintln!("Have to skip {case:?} since parent is not init");
             }
-            unistd::setpgid(Pid::this(), Pid::from_raw(1))?;
+            unistd::setpgid(Pid::this(), Pid::from_raw(1)).unwrap();
         }
 
         match unistd::fork().unwrap() {
             ForkResult::Parent { child } => {
                 thread::sleep(Duration::from_millis(100));
                 let status =
-                    wait::waitpid(child, Some(WaitPidFlag::WNOHANG | WaitPidFlag::WUNTRACED))?;
+                    wait::waitpid(child, Some(WaitPidFlag::WNOHANG | WaitPidFlag::WUNTRACED))
+                        .unwrap();
                 if matches!(case, Case::Setsid | Case::SameGrp) {
                     // Orphan pgrp, so stop signal must be discarded.
                     assert_eq!(status, WaitStatus::Exited(child, 42))
                 } else {
                     // Non-orphan group, so the status must be Stopped.
                     assert_eq!(status, WaitStatus::Stopped(child, sig));
-                    signal::kill(child, Signal::SIGKILL)?;
+                    signal::kill(child, Signal::SIGKILL).unwrap();
                 }
             }
             ForkResult::Child => {
                 match case {
                     Case::SameGrp => (),
                     Case::Nonorphan => {
-                        unistd::setpgid(Pid::this(), Pid::this())?;
+                        unistd::setpgid(Pid::this(), Pid::this()).unwrap();
                     }
                     Case::Setsid => {
-                        unistd::setsid()?;
+                        unistd::setsid().unwrap();
 
                         // TODO: getsid missing!
-                        //assert_eq!(unistd::getsid(None)?, unistd::getpid());
+                        //assert_eq!(unistd::getsid(None).unwrap(), unistd::getpid());
 
-                        assert_eq!(unistd::getpgid(None)?, unistd::getpid());
+                        assert_eq!(unistd::getpgid(None).unwrap(), unistd::getpid());
                     }
                 }
                 // Stop this process group using either SIGTTIN, SIGTTOU, or SIGTSTP
-                signal::killpg(Pid::this(), sig)?;
+                signal::killpg(Pid::this(), sig).unwrap();
                 std::process::exit(42);
             }
         }
-        Ok(())
     }
     unsafe {
         for sig in [Signal::SIGTTIN, Signal::SIGTTOU, Signal::SIGTSTP] {
-            inner(sig, Case::Setsid)?;
-            inner(sig, Case::Nonorphan)?;
-            inner(sig, Case::SameGrp)?;
+            inner(sig, Case::Setsid);
+            inner(sig, Case::Nonorphan);
+            inner(sig, Case::SameGrp);
         }
     }
-    Ok(())
 }
-pub fn thread_reap() -> Result<()> {
+pub fn thread_reap() {
     #[derive(Debug)]
     enum Case {
         Exit,
         PthreadExit,
     }
-    fn parse_ps(path: &str) -> Result<Vec<Vec<String>>> {
-        BufReader::new(File::open(path)?)
+    fn parse_ps(path: &str) -> Vec<Vec<String>> {
+        BufReader::new(File::open(path).unwrap())
             .lines()
             .map(|l_res| {
-                let l = l_res?;
-                Ok(l.split(' ')
+                let l = l_res.unwrap();
+                l.split(' ')
                     .filter(|s| !s.is_empty())
                     .map(|s| s.to_string())
-                    .collect::<Vec<String>>())
+                    .collect::<Vec<String>>()
             })
-            .collect::<Result<Vec<_>>>()
+            .collect::<Vec<_>>()
     }
-    fn inner(case: Case) -> Result<()> {
+    fn inner(case: Case) {
         println!("Testing {case:?}");
-        let [mut read_fd, write_fd] = crate::pipe();
+        let [mut read_fd, write_fd] = crate::memory::pipe();
         unsafe {
             assert_ne!(
                 libc::fcntl(read_fd.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK),
@@ -365,7 +358,7 @@ pub fn thread_reap() -> Result<()> {
             );
         }
 
-        match unsafe { unistd::fork()? } {
+        match unsafe { unistd::fork().unwrap() } {
             ForkResult::Child => thread::scope(|scope| {
                 drop(read_fd);
 
@@ -408,7 +401,7 @@ pub fn thread_reap() -> Result<()> {
                     }
                 }
                 drop(write_fd);
-                for ref line in parse_ps("/scheme/sys/context")? {
+                for ref line in parse_ps("/scheme/sys/context") {
                     let Some(line_f) = line.first() else {
                         continue;
                     };
@@ -425,15 +418,12 @@ pub fn thread_reap() -> Result<()> {
                 }
             }
         }
-
-        Ok(())
     }
 
-    inner(Case::Exit)?;
-    inner(Case::PthreadExit)?;
-    Ok(())
+    inner(Case::Exit);
+    inner(Case::PthreadExit);
 }
-pub fn waitpid_setpgid_echild() -> Result<()> {
+pub fn waitpid_setpgid_echild() {
     #[derive(Debug)]
     enum Case {
         Setpgid,
@@ -441,19 +431,19 @@ pub fn waitpid_setpgid_echild() -> Result<()> {
     }
 
     let parent = unistd::getpid();
-    unistd::setpgid(parent, parent)?;
+    unistd::setpgid(parent, parent).unwrap();
 
     for case in [Case::Setpgid, Case::Setsid] {
         println!("Testing waitpid-setpgid == ECHILD, case {case:?}");
-        match unsafe { unistd::fork()? } {
+        match unsafe { unistd::fork().unwrap() } {
             ForkResult::Child => {
                 let child = unistd::getpid();
                 thread::sleep(Duration::from_millis(100));
                 match case {
-                    Case::Setsid => assert_eq!(unistd::setsid()?, child),
-                    Case::Setpgid => unistd::setpgid(child, child)?,
+                    Case::Setsid => assert_eq!(unistd::setsid().unwrap(), child),
+                    Case::Setpgid => unistd::setpgid(child, child).unwrap(),
                 }
-                assert_eq!(unistd::getpgid(None)?, child);
+                assert_eq!(unistd::getpgid(None).unwrap(), child);
                 thread::sleep(Duration::MAX);
                 std::process::exit(0);
             }
@@ -474,7 +464,7 @@ pub fn waitpid_setpgid_echild() -> Result<()> {
                 let delta = before.elapsed();
                 assert!(delta >= Duration::from_millis(100));
 
-                signal::kill(child, Signal::SIGTERM)?;
+                signal::kill(child, Signal::SIGTERM).unwrap();
                 // None (-1) shall match child
                 assert_eq!(
                     wait::waitpid(None, Some(WaitPidFlag::empty())),
@@ -483,9 +473,8 @@ pub fn waitpid_setpgid_echild() -> Result<()> {
             }
         }
     }
-    Ok(())
 }
-pub fn orphan_exit_sighup<const SEPARATE_SESSION: bool>() -> Result<()> {
+pub fn orphan_exit_sighup<const SEPARATE_SESSION: bool>() {
     println!("Testing SIGHUP for newly-orphaned process groups");
     // Start a new session with a few subprocesses, and check that all of them get a SIGHUP if the
     // process group becomes an orphan process group. An orphaned process group is defined by POSIX
@@ -516,8 +505,8 @@ pub fn orphan_exit_sighup<const SEPARATE_SESSION: bool>() -> Result<()> {
     // be SIGCONT'd and SIGHUP'd.
 
     if SEPARATE_SESSION {
-        unistd::setsid()?;
-    } else if unistd::getppid().as_raw() != 1 || unistd::getpgid(None)?.as_raw() != 1 {
+        unistd::setsid().unwrap();
+    } else if unistd::getppid().as_raw() != 1 || unistd::getpgid(None).unwrap().as_raw() != 1 {
         eprintln!("warning: this test only works when ppid and pgid is init!");
         std::process::exit(0);
     }
@@ -525,13 +514,13 @@ pub fn orphan_exit_sighup<const SEPARATE_SESSION: bool>() -> Result<()> {
     // Mask SIGHUP
     let mut just_sighup = SigSet::empty();
     just_sighup.add(Signal::SIGHUP);
-    signal::sigprocmask(SigmaskHow::SIG_BLOCK, Some(&just_sighup), None)?;
+    signal::sigprocmask(SigmaskHow::SIG_BLOCK, Some(&just_sighup), None).unwrap();
 
-    let [mut read_fd, mut write_fd] = crate::pipe();
+    let [mut read_fd, mut write_fd] = crate::memory::pipe();
 
     const N: u8 = 4;
 
-    if let ForkResult::Parent { child } = unsafe { unistd::fork()? } {
+    if let ForkResult::Parent { child } = unsafe { unistd::fork().unwrap() } {
         // GRANDPARENT
 
         drop(write_fd);
@@ -540,18 +529,18 @@ pub fn orphan_exit_sighup<const SEPARATE_SESSION: bool>() -> Result<()> {
             Ok(WaitStatus::Exited(child, 0))
         );
         let mut buf = [0xFF_u8; N as usize];
-        read_fd.read_exact(&mut buf)?;
+        read_fd.read_exact(&mut buf).unwrap();
         println!("BUF: {buf:?}");
         buf.sort();
         for i in 0..N {
             assert_eq!(buf[usize::from(i)], i);
         }
-        return Ok(());
+        return;
     }
     drop(read_fd);
 
     for i in 0..N {
-        let ForkResult::Child = (unsafe { unistd::fork()? }) else {
+        let ForkResult::Child = (unsafe { unistd::fork().unwrap() }) else {
             // PARENT
             continue;
         };
@@ -560,7 +549,7 @@ pub fn orphan_exit_sighup<const SEPARATE_SESSION: bool>() -> Result<()> {
         // TODO: add to redox
         // just_sighup.wait().expect("failed to wait for SIGHUP");
 
-        signal::kill(Pid::this(), Signal::SIGSTOP)?;
+        signal::kill(Pid::this(), Signal::SIGSTOP).unwrap();
 
         let mut sig = 0 as libc::c_int;
         assert_eq!(
@@ -573,12 +562,12 @@ pub fn orphan_exit_sighup<const SEPARATE_SESSION: bool>() -> Result<()> {
         std::process::exit(0); // only init will notice
     }
     // PARENT
-    unistd::setpgid(Pid::this(), Pid::this())?;
+    unistd::setpgid(Pid::this(), Pid::this()).unwrap();
     thread::sleep(Duration::from_millis(100));
     std::process::exit(0);
 }
-pub fn wcontinued_sigcont_catching() -> Result<()> {
-    let [mut read_fd, write_fd] = crate::pipe();
+pub fn wcontinued_sigcont_catching() {
+    let [read_fd, write_fd] = crate::memory::pipe();
 
     let signals = [
         Signal::SIGSTOP,
@@ -586,7 +575,7 @@ pub fn wcontinued_sigcont_catching() -> Result<()> {
         Signal::SIGTTIN,
         Signal::SIGTTOU,
     ];
-    match unsafe { unistd::fork()? } {
+    match unsafe { unistd::fork().unwrap() } {
         ForkResult::Child => {
             static WRITE_FD: AtomicUsize = AtomicUsize::new(0);
             WRITE_FD.store(write_fd.into_raw_fd() as usize, Ordering::SeqCst);
@@ -603,7 +592,7 @@ pub fn wcontinued_sigcont_catching() -> Result<()> {
             unsafe {
                 let handler = SigHandler::Handler(handler);
                 let action = signal::SigAction::new(handler, SaFlags::empty(), SigSet::empty());
-                signal::sigaction(Signal::SIGCONT, &action)?;
+                signal::sigaction(Signal::SIGCONT, &action).unwrap();
             }
             */
 
@@ -624,33 +613,34 @@ pub fn wcontinued_sigcont_catching() -> Result<()> {
                     wait::waitpid(
                         child,
                         Some(WaitPidFlag::WUNTRACED | WaitPidFlag::WCONTINUED)
-                    )?,
+                    )
+                    .unwrap(),
                     WaitStatus::Stopped(child, signal)
                 );
                 println!("--stopped");
-                signal::kill(child, Signal::SIGCONT)?;
+                signal::kill(child, Signal::SIGCONT).unwrap();
                 assert_eq!(
                     wait::waitpid(
                         child,
                         Some(WaitPidFlag::WUNTRACED | WaitPidFlag::WCONTINUED)
-                    )?,
+                    )
+                    .unwrap(),
                     WaitStatus::Continued(child)
                 );
                 println!("--contd");
                 // FIXME: this also fails, but not on Linux
                 /*
                 let mut buf = [0xFF];
-                assert_eq!(read_fd.read(&mut buf)?, 1);
+                assert_eq!(read_fd.read(&mut buf).unwrap(), 1);
                 assert_eq!(buf[0], Signal::SIGCONT as u8);
                 */
             }
         }
     }
-    Ok(())
 }
-pub fn using_signal_hook() -> Result<()> {
+pub fn using_signal_hook() {
     let flag = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGALRM, Arc::clone(&flag))?;
+    signal_hook::flag::register(signal_hook::consts::SIGALRM, Arc::clone(&flag)).unwrap();
 
     struct ForceSendSync<T>(T);
     unsafe impl<T> Send for ForceSendSync<T> {}
@@ -665,16 +655,15 @@ pub fn using_signal_hook() -> Result<()> {
     thread::sleep(Duration::from_millis(200));
     assert!(flag.load(Ordering::SeqCst));
     thread.join().unwrap();
-    Ok(())
 }
-pub fn waitpid_esrch() -> Result<()> {
+pub fn waitpid_esrch() {
     // Spawn a few children, then waitpid "any child" until ECHILD, followed by checks that further
     // waitpids return ESRCH.
     const N: usize = 4;
 
     let mut children = Vec::new();
     for _ in 0..N {
-        if let ForkResult::Parent { child } = unsafe { unistd::fork()? } {
+        if let ForkResult::Parent { child } = unsafe { unistd::fork().unwrap() } {
             // PARENT
             children.push(child);
             continue;
@@ -702,11 +691,9 @@ pub fn waitpid_esrch() -> Result<()> {
     for child in awaited_children {
         assert_eq!(wait::waitpid(child, None), Err(Errno::ECHILD));
     }
-
-    Ok(())
 }
 
-pub fn waitpid_status_discard() -> Result<()> {
+pub fn waitpid_status_discard() {
     // POSIX 2024 states (p. 564):
     //
     // > If new status information is generated, and the process already had status information, the
@@ -715,17 +702,17 @@ pub fn waitpid_status_discard() -> Result<()> {
     // We can test this by creating a child process, stopping it+continuing it repeatedly, and
     // ensuring only the latest status information is available at any given time.
 
-    match unsafe { unistd::fork()? } {
+    match unsafe { unistd::fork().unwrap() } {
         ForkResult::Child => {
             thread::sleep(Duration::MAX);
             unreachable!();
         }
         ForkResult::Parent { child } => {
-            signal::kill(child, Signal::SIGSTOP)?;
+            signal::kill(child, Signal::SIGSTOP).unwrap();
 
             // TODO: repeatedly?
-            signal::kill(child, Signal::SIGCONT)?;
-            signal::kill(child, Signal::SIGTERM)?;
+            signal::kill(child, Signal::SIGCONT).unwrap();
+            signal::kill(child, Signal::SIGTERM).unwrap();
 
             // Not guaranteed it has time to terminate otherwise.
             thread::sleep(Duration::from_millis(100));
@@ -741,15 +728,13 @@ pub fn waitpid_status_discard() -> Result<()> {
             assert_eq!(wait::waitpid(child, Some(flags)), Err(Errno::ECHILD));
         }
     }
-
-    Ok(())
 }
-pub fn waitpid_transitive_queue() -> Result<()> {
+pub fn waitpid_transitive_queue() {
     // Spawn a lot of children
     let mut children = Vec::new();
 
     for _ in 0..100 {
-        if let ForkResult::Parent { child } = unsafe { unistd::fork()? } {
+        if let ForkResult::Parent { child } = unsafe { unistd::fork().unwrap() } {
             children.push(child);
             continue;
         }
@@ -760,16 +745,16 @@ pub fn waitpid_transitive_queue() -> Result<()> {
     // PARENT
     // make CHILDi where i divisble by 10, process group leaders
     for i in (0..100).filter(|i| *i % 10 == 0) {
-        unistd::setpgid(children[i], children[i])?;
+        unistd::setpgid(children[i], children[i]).unwrap();
     }
     // make other CHILDi's belong to group leader CHILD_floor((100-i)/10)*10
     for i in (0..100).filter(|i| *i % 10 != 0) {
         let j = (100 - i) / 10 * 10;
-        unistd::setpgid(children[i], children[j])?;
+        unistd::setpgid(children[i], children[j]).unwrap();
     }
     // exit all leaders and remove them from waitpid queue
     for i in (0..100).filter(|i| *i % 10 == 0) {
-        signal::kill(children[i], Signal::SIGTERM)?;
+        signal::kill(children[i], Signal::SIGTERM).unwrap();
         assert_eq!(
             wait::waitpid(
                 Pid::from_raw(-children[i].as_raw()),
@@ -780,7 +765,7 @@ pub fn waitpid_transitive_queue() -> Result<()> {
     }
     // kill all remaining children
     for i in (0..100).filter(|i| *i % 10 != 0) {
-        signal::kill(children[i], Signal::SIGTERM)?;
+        signal::kill(children[i], Signal::SIGTERM).unwrap();
     }
     thread::sleep(Duration::from_millis(1000));
 
@@ -793,31 +778,29 @@ pub fn waitpid_transitive_queue() -> Result<()> {
     assert_ne!(res, Err(Errno::ECHILD),);
     // all of the children should be dead by now
     assert_ne!(res, Ok(WaitStatus::StillAlive));
-
-    Ok(())
 }
-pub fn pgrp_lifetime() -> Result<()> {
+pub fn pgrp_lifetime() {
     // Check that an old process group is recognized as 'no longer existent' if all members exit,
     // or switch to a different group.
-    let ForkResult::Parent { child: child1 } = (unsafe { unistd::fork()? }) else {
-        unistd::setpgid(Pid::this(), Pid::this())?;
+    let ForkResult::Parent { child: child1 } = (unsafe { unistd::fork().unwrap() }) else {
+        unistd::setpgid(Pid::this(), Pid::this()).unwrap();
         thread::sleep(Duration::from_millis(200));
         // leaving the group by exiting and being waited by parent
         std::process::exit(0);
     };
     thread::sleep(Duration::from_millis(100));
-    let ForkResult::Parent { .. } = (unsafe { unistd::fork()? }) else {
-        unistd::setpgid(Pid::this(), child1)?;
+    let ForkResult::Parent { .. } = (unsafe { unistd::fork().unwrap() }) else {
+        unistd::setpgid(Pid::this(), child1).unwrap();
         thread::sleep(Duration::from_millis(100));
         // leaving the group using setpgid
-        unistd::setpgid(Pid::this(), Pid::this())?;
+        unistd::setpgid(Pid::this(), Pid::this()).unwrap();
         std::process::exit(0);
     };
-    let ForkResult::Parent { .. } = (unsafe { unistd::fork()? }) else {
-        unistd::setpgid(Pid::this(), child1)?;
+    let ForkResult::Parent { .. } = (unsafe { unistd::fork().unwrap() }) else {
+        unistd::setpgid(Pid::this(), child1).unwrap();
         thread::sleep(Duration::from_millis(100));
         // leaving the group using setsid
-        unistd::setsid()?;
+        unistd::setsid().unwrap();
         std::process::exit(0); // from leaving the group using setsid
     };
     thread::sleep(Duration::from_millis(300));
@@ -832,30 +815,30 @@ pub fn pgrp_lifetime() -> Result<()> {
 
     // Reap other children.
     while let Ok(_) = wait::wait() {}
-    Ok(())
 }
-pub fn waitpid_eintr() -> Result<()> {
-    let [mut r1, mut w1] = crate::pipe();
-    let [mut r2, mut w2] = crate::pipe();
+pub fn waitpid_eintr() {
+    let [mut r1, mut w1] = crate::memory::pipe();
+    let [mut r2, mut w2] = crate::memory::pipe();
 
     extern "C" fn h(_: libc::c_int) {}
     unsafe {
         signal::sigaction(
             Signal::SIGUSR1,
             &signal::SigAction::new(SigHandler::Handler(h), SaFlags::empty(), SigSet::all()),
-        )?;
+        )
+        .unwrap();
     }
 
     let parent = unistd::getpid();
 
-    match unsafe { unistd::fork()? } {
+    match unsafe { unistd::fork().unwrap() } {
         ForkResult::Child => {
             thread::sleep(Duration::from_millis(500));
-            w1.write_all(&[13])?;
-            signal::kill(parent, Signal::SIGUSR1)?;
+            w1.write_all(&[13]).unwrap();
+            signal::kill(parent, Signal::SIGUSR1).unwrap();
 
             let mut buf = [0];
-            r2.read_exact(&mut buf)?;
+            r2.read_exact(&mut buf).unwrap();
             assert_eq!(buf, [37]);
 
             std::process::exit(0);
@@ -865,16 +848,15 @@ pub fn waitpid_eintr() -> Result<()> {
             // (hence the pipe).
             let mut buf = [0_u8];
             assert_eq!(wait::waitpid(child, None), Err(Errno::EINTR));
-            r1.read_exact(&mut buf)?;
+            r1.read_exact(&mut buf).unwrap();
             assert_eq!(buf, [13]);
 
-            w2.write_all(&[37])?;
+            w2.write_all(&[37]).unwrap();
             assert_eq!(wait::waitpid(child, None), Ok(WaitStatus::Exited(child, 0)));
-            Ok(())
         }
     }
 }
-pub fn raise_correct_sig_group() -> Result<()> {
+pub fn raise_correct_sig_group() {
     extern "C" fn handler(s: libc::c_int) {
         if s == 3 {
             std::process::exit(1);
@@ -896,7 +878,6 @@ pub fn raise_correct_sig_group() -> Result<()> {
             wait::waitpid(child, Some(WaitPidFlag::empty())).unwrap(),
             WaitStatus::Exited(child, 0)
         );
-        Ok(())
     } else {
         unsafe {
             libc::raise(35);
@@ -904,8 +885,8 @@ pub fn raise_correct_sig_group() -> Result<()> {
         std::process::exit(0);
     }
 }
-pub fn sigkill_fail_code() -> Result<()> {
-    let [mut read_fd, _write_fd] = crate::pipe();
+pub fn sigkill_fail_code() {
+    let [mut read_fd, _write_fd] = crate::memory::pipe();
     match unsafe { unistd::fork().unwrap() } {
         ForkResult::Child => {
             // block forever
@@ -913,12 +894,11 @@ pub fn sigkill_fail_code() -> Result<()> {
             unreachable!();
         }
         ForkResult::Parent { child } => {
-            signal::kill(child, Signal::SIGKILL)?;
+            signal::kill(child, Signal::SIGKILL).unwrap();
             assert_eq!(
-                wait::waitpid(child, None)?,
+                wait::waitpid(child, None).unwrap(),
                 WaitStatus::Signaled(child, Signal::SIGKILL, false)
             );
         }
     }
-    Ok(())
 }

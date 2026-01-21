@@ -1,5 +1,5 @@
 // TODO: Probably this is arch-independent test
-fn redoxfs_range_bookkeeping() {
+pub fn redoxfs_range_bookkeeping() {
     // Number of pages
     const P: usize = 128;
 

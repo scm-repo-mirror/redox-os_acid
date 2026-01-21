@@ -1,36 +1,17 @@
 //!Acid testing program
-#![feature(core_intrinsics, let_chains, thread_local)]
+#![allow(internal_features)]
+#![feature(core_intrinsics, thread_local)]
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::hash::Hasher;
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
-use std::os::unix::thread::JoinHandleExt;
-use std::process::Command;
-use std::sync::atomic::{compiler_fence, AtomicUsize, Ordering};
-use std::sync::Barrier;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::{env, process};
 
-use libc::c_int;
-use thread::PAGE_SIZE;
-use thread::{
-    Map, MapFlags, ADDRSPACE_OP_MMAP, ADDRSPACE_OP_MUNMAP, O_CLOEXEC, O_CREAT, O_DIRECTORY,
-    O_RDONLY, O_RDWR,
-};
-
-use anyhow::{bail, Result};
-
-// (rust-analyzer uses cfg(test) but doesn't need symbols, which cargo check would need)
+#[cfg(any(test, target_os = "redox"))]
+mod daemon;
 #[cfg(any(test, target_os = "redox"))]
 mod scheme_call;
 
 mod arch;
-mod daemon;
 mod fdtbl;
 mod memory;
 mod proc;
@@ -41,53 +22,50 @@ fn main() {
     let mut tests: HashMap<&'static str, fn()> = HashMap::new();
     #[cfg(target_arch = "x86_64")]
     tests.insert("avx2", arch::avx2);
-    tests.insert("create_test", create_test);
-    tests.insert("channel", channel_test);
+    tests.insert("channel", thread::channel);
     // tests.insert("page_fault", page_fault_test); // TODO
-    tests.insert("sleep_granularity", sleep_granularity_test);
-    #[cfg(target_arch = "x86_64")]
-    tests.insert("switch", switch_test);
-    tests.insert("thread", thread_test);
-    tests.insert("tls", tls_test);
+    tests.insert("sleep_granularity", thread::sleep_granularity);
+    tests.insert("context_switch", thread::context_switch);
+    tests.insert("thread_spawn", thread::thread_spawn);
+    tests.insert("tls", thread::tls);
     #[cfg(any(test, target_os = "redox"))]
-    {
-        tests.insert("cross_scheme_link", cross_scheme_link::cross_scheme_link);
-    }
-    tests.insert("efault", efault_test);
+    tests.insert("cross_scheme_link", scheme_call::cross_scheme_link);
+    tests.insert("efault", memory::efault_test);
     #[cfg(target_arch = "x86_64")]
     tests.insert("direction_flag_sc", arch::direction_flag_syscall);
     #[cfg(target_arch = "x86_64")]
     tests.insert("direction_flag_int", arch::direction_flag_interrupt);
-    tests.insert("pipe", pipe_test);
+    tests.insert("pipe", memory::pipe_test);
     #[cfg(any(test, target_os = "redox"))]
     {
         tests.insert(
             "scheme_data_leak_proc",
-            scheme_data_leak::scheme_data_leak_test_proc,
+            scheme_call::scheme_data_leak_test_proc,
         );
         tests.insert(
             "scheme_data_leak_thread",
-            scheme_data_leak::scheme_data_leak_test_thread,
+            scheme_call::scheme_data_leak_test_thread,
         );
     }
-    tests.insert("relibc_leak", relibc_leak::test);
-    tests.insert("clone_grant_using_fmap", clone_grant_using_fmap_test);
+    #[cfg(any(test, target_os = "redox"))]
+    tests.insert("libc_call", scheme_call::libc_call);
+    tests.insert("clone_grant_using_fmap", memory::clone_grant_using_fmap);
     tests.insert(
         "clone_grant_using_fmap_lazy",
-        clone_grant_using_fmap_lazy_test,
+        memory::clone_grant_using_fmap_lazy,
     );
     // TODO: FIX openat_test
     // tests.insert("openat", openat_test);
-    tests.insert("anonymous_map_shared", anonymous_map_shared);
+    tests.insert("anonymous_map_shared", memory::anonymous_map_shared);
     //tests.insert("tlb", tlb_test); // TODO
-    tests.insert("file_mmap", file_mmap_test);
+    tests.insert("file_mmap", memory::file_mmap_test);
     #[cfg(target_arch = "x86_64")]
-    tests.insert("redoxfs_range_bookkeeping", redoxfs_range_bookkeeping);
+    tests.insert("redoxfs_range_bookkeeping", arch::redoxfs_range_bookkeeping);
     //tests.insert("eintr", eintr::eintr); // TODO
-    tests.insert("syscall_bench", syscall_bench::bench);
-    tests.insert("scheme_call_bench", syscall_bench::scheme_call_bench);
-    tests.insert("filetable_leak", filetable_leak);
-    #[cfg(target_os = "redox")]
+    #[cfg(target_arch = "x86_64")]
+    tests.insert("invalid_syscall", arch::invalid_syscall);
+    tests.insert("filetable_leak", memory::filetable_leak);
+    #[cfg(any(test, target_os = "redox"))]
     tests.insert("scheme_call", scheme_call::scheme_call);
     tests.insert("fork_tree_bench", proc::fork_tree_bench::<false>);
     tests.insert("fork_serial_bench", proc::fork_serial_bench::<false>);
@@ -132,6 +110,7 @@ fn main() {
             let time = Instant::now();
             test();
             let elapsed = time.elapsed();
+            println!("acid: took {}ms", elapsed.as_millis());
         } else {
             println!("acid: {}: not found", arg);
             process::exit(1);

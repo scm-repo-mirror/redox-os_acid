@@ -282,7 +282,7 @@ impl SchemeMut for DupScheme {
     }
 }
 
-fn cross_scheme_link() {
+pub fn cross_scheme_link() {
     println!("Testing cross scheme links");
     crate::daemon::scheme("cross_scheme_link_redirect", "redirect", RedirectScheme).unwrap();
     crate::daemon::scheme("cross_scheme_link_dup", "dup", DupScheme).unwrap();

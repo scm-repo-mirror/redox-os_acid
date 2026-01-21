@@ -1,12 +1,16 @@
-use std::{fs::File, sync::atomic::AtomicUsize, thread};
+use std::{
+    fs::{File, OpenOptions}, hash::{DefaultHasher, Hasher}, io::{Read, Write}, os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd}, sync::{
+        Barrier, atomic::{AtomicUsize, Ordering}
+    }, thread
+};
 
-use syscall::{MapFlags, O_CLOEXEC};
+use syscall::{Map, MapFlags, PAGE_SIZE};
 
-pub fn clone_grant_using_fmap_test() {
+pub fn clone_grant_using_fmap() {
     clone_grant_using_fmap_test_inner(false)
 }
 
-pub fn clone_grant_using_fmap_lazy_test() {
+pub fn clone_grant_using_fmap_lazy() {
     clone_grant_using_fmap_test_inner(true)
 }
 
@@ -25,16 +29,16 @@ pub fn test_shared_ref(shared_ref: &AtomicUsize) {
 
     if fork_res == 0 {
         shared_ref.store(0xDEADBEEF, Ordering::SeqCst);
-        let _ = thread::write(write_fd1, &[0]).unwrap();
-        let _ = thread::read(read_fd2, &mut [0]).unwrap();
+        let _ = syscall::write(write_fd1, &[0]).unwrap();
+        let _ = syscall::read(read_fd2, &mut [0]).unwrap();
         assert_eq!(shared_ref.load(Ordering::SeqCst), 2);
     } else {
-        let _ = thread::read(read_fd1, &mut [0]).unwrap();
+        let _ = syscall::read(read_fd1, &mut [0]).unwrap();
         assert_eq!(
             shared_ref.compare_exchange(0xDEADBEEF, 2, Ordering::SeqCst, Ordering::SeqCst),
             Ok(0xDEADBEEF)
         );
-        let _ = thread::write(write_fd2, &[0]).unwrap();
+        let _ = syscall::write(write_fd2, &[0]).unwrap();
     }
 }
 
@@ -45,7 +49,7 @@ fn clone_grant_using_fmap_test_inner(lazy: bool) {
         MapFlags::empty()
     };
 
-    let mem = thread::open("shm:clone_grant_using_fmap_test", O_CLOEXEC).unwrap();
+    let mem = syscall::open("shm:clone_grant_using_fmap_test", syscall::O_CLOEXEC).unwrap();
     let base_ptr = unsafe {
         syscall::fmap(
             mem,
@@ -149,7 +153,7 @@ pub fn file_mmap_test() {
             let mut child_memory = File::open("thisproc:current/addrspace").unwrap();
 
             let words = [
-                ADDRSPACE_OP_MMAP,
+                syscall::ADDRSPACE_OP_MMAP,
                 parent_memory.as_raw_fd() as usize,
                 buf2.as_ptr() as usize,
                 0xDEADB000,
@@ -166,10 +170,10 @@ pub fn file_mmap_test() {
                 .unwrap();
             dbg!();
 
-            let _ = thread::write(pipes1[1] as usize, &[1]).unwrap();
+            let _ = syscall::write(pipes1[1] as usize, &[1]).unwrap();
             dbg!();
 
-            let words = [ADDRSPACE_OP_MUNMAP, 0xDEADB000, 4096];
+            let words = [syscall::ADDRSPACE_OP_MUNMAP, 0xDEADB000, 4096];
             child_memory
                 .write(core::slice::from_raw_parts(
                     words.as_ptr().cast(),
@@ -177,19 +181,19 @@ pub fn file_mmap_test() {
                 ))
                 .unwrap();
 
-            let _ = thread::write(pipes2[1] as usize, &[1]).unwrap();
+            let _ = syscall::write(pipes2[1] as usize, &[1]).unwrap();
             dbg!();
 
             std::process::exit(0);
         } else {
             dbg!();
-            let _ = thread::read(pipes1[0] as usize, &mut [0]).unwrap();
+            let _ = syscall::read(pipes1[0] as usize, &mut [0]).unwrap();
             assert_eq!(
                 syscall::funmap(buf2.as_ptr() as usize, 4096),
-                Err(thread::Error::new(thread::EBUSY))
+                Err(syscall::Error::new(syscall::EBUSY))
             );
             dbg!();
-            let _ = thread::read(pipes2[0] as usize, &mut [0]).unwrap();
+            let _ = syscall::read(pipes2[0] as usize, &mut [0]).unwrap();
             assert_eq!(syscall::funmap(buf2.as_ptr() as usize, 4096), Ok(0));
             dbg!();
         }
@@ -224,8 +228,8 @@ pub fn anonymous_map_shared() {
 }
 
 pub fn pipe_test() {
-    let read_fd = thread::open("pipe:", O_RDONLY).expect("failed to open pipe:");
-    let write_fd = thread::dup(read_fd, b"write").expect("failed to obtain write pipe");
+    let read_fd = syscall::open("pipe:", syscall::O_RDONLY).expect("failed to open pipe:");
+    let write_fd = syscall::dup(read_fd, b"write").expect("failed to obtain write pipe");
 
     let barrier = Barrier::new(2);
 
@@ -243,13 +247,13 @@ pub fn pipe_test() {
         let thread = scope.spawn(|| {
             // Saturate queue.
             let bytes_written =
-                thread::write(write_fd, &vec![0_u8; 65537]).expect("failed to write to pipe");
+                syscall::write(write_fd, &vec![0_u8; 65537]).expect("failed to write to pipe");
             assert_eq!(bytes_written, 65536);
 
             barrier.wait();
 
             // Then try writing again.
-            let bytes_written = thread::write(write_fd, &[0_u8]).expect("failed to write to pipe");
+            let bytes_written = syscall::write(write_fd, &[0_u8]).expect("failed to write to pipe");
             assert_eq!(bytes_written, 1);
 
             barrier.wait();
@@ -265,7 +269,7 @@ pub fn pipe_test() {
                 let mut bytes_written = 0;
 
                 while bytes_written < i {
-                    bytes_written += thread::write(write_fd, &buf[bytes_written..i])
+                    bytes_written += syscall::write(write_fd, &buf[bytes_written..i])
                         .expect("failed to write to pipe");
                 }
             }
@@ -274,10 +278,10 @@ pub fn pipe_test() {
         barrier.wait();
 
         let bytes_read =
-            thread::read(read_fd, &mut vec![0_u8; 65537]).expect("failed to read from pipe");
+            syscall::read(read_fd, &mut vec![0_u8; 65537]).expect("failed to read from pipe");
         assert_eq!(bytes_read, 65536);
 
-        let bytes_read = thread::read(read_fd, &mut [0_u8]).expect("failed to read from pipe");
+        let bytes_read = syscall::read(read_fd, &mut [0_u8]).expect("failed to read from pipe");
         assert_eq!(bytes_read, 1);
 
         barrier.wait();
@@ -288,7 +292,7 @@ pub fn pipe_test() {
             let mut bytes_read = 0;
 
             while bytes_read < i {
-                bytes_read += thread::read(read_fd, &mut buf[bytes_read..i])
+                bytes_read += syscall::read(read_fd, &mut buf[bytes_read..i])
                     .expect("failed to read from pipe");
             }
 
@@ -448,13 +452,11 @@ pub fn pipe_test() {
 }*/
 
 pub fn efault_test() {
-    use thread::*;
-
-    let ret = unsafe { syscall3(SYS_WRITE, 1, 0xdeadbeef, 0xfeedface) };
-    assert_eq!(ret, Err(Error::new(EFAULT)));
+    let ret = unsafe { syscall::syscall3(syscall::SYS_WRITE, 1, 0xdeadbeef, 0xfeedface) };
+    assert_eq!(ret, Err(syscall::Error::new(syscall::EFAULT)));
 }
 
-fn pipe() -> [File; 2] {
+pub(crate) fn pipe() -> [File; 2] {
     let mut fds = [0; 2];
     assert_ne!(unsafe { libc::pipe(fds.as_mut_ptr()) }, -1);
     fds.map(|f| unsafe { File::from_raw_fd(f) })
