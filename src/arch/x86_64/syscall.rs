@@ -1,0 +1,108 @@
+use std::fs::File;
+use std::io::BufWriter;
+use std::os::unix::thread::JoinHandleExt;
+use std::thread;
+
+pub fn invalid_syscall() {
+    // TODO: Support deeper syscalls, like reading O_NONBLOCK from an empty pipe.
+    unsafe {
+        core::arch::asm!("
+            mov edx, 1337 // invalid syscall
+            mov edi, 1 << 24 // iteration count
+
+            .p2align 6
+
+            2:
+            .rept 15
+            mov eax, edx
+            syscall
+            .endr
+            dec edi
+            jnz 2b
+        ", out("edx") _, out("edi") _, out("ecx") _, out("r11") _, out("eax") _);
+    }
+}
+
+pub fn direction_flag_syscall() {
+    let path = *b"sys:context";
+
+    let result: usize;
+
+    unsafe {
+        core::arch::asm!("
+            std
+            syscall
+            cld
+        ", inout("rax") syscall::SYS_OPEN => result, in("rdi") path.as_ptr(), in("rsi") path.len(), in("rdx") syscall::O_RDONLY, out("rcx") _, out("r11") _);
+    }
+
+    let file = syscall::Error::demux(result).unwrap();
+
+    let mut buf = [0_u8; 4096];
+
+    let result: usize;
+
+    unsafe {
+        core::arch::asm!("
+            std
+            syscall
+            cld
+        ", inout("rax") syscall::SYS_READ => result, in("rdi") file, in("rsi") buf.as_mut_ptr(), in("rdx") buf.len(), out("rcx") _, out("r11") _);
+    }
+
+    syscall::Error::demux(result).unwrap();
+}
+
+pub fn direction_flag_interrupt() {
+    let thread = std::thread::spawn(|| unsafe {
+        core::arch::asm!(
+            "
+                std
+            2:
+                pause
+                jmp 2b
+            ",
+            options(noreturn)
+        );
+    });
+
+    // TODO: A way to remove sleep so this test can be benched
+    std::thread::sleep(Duration::from_secs(1));
+
+    let pthread: libc::pthread_t = thread.into_pthread_t();
+
+    unsafe {
+        assert_eq!(libc::pthread_detach(pthread), 0);
+        assert_eq!(libc::pthread_kill(pthread, libc::SIGKILL), 0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_invalid_syscall() {
+        invalid_syscall()
+    }
+
+    #[test]
+    fn test_direction_flag_syscall() {
+        direction_flag_syscall()
+    }
+
+    #[test]
+    fn test_direction_flag_interrupt() {
+        direction_flag_interrupt()
+    }
+
+    #[bench]
+    fn bench_invalid_syscall() {
+        invalid_syscall()
+    }
+
+    #[bench]
+    fn bench_direction_flag_syscall() {
+        direction_flag_syscall()
+    }
+}

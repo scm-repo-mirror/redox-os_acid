@@ -34,33 +34,13 @@ mod scheme_call;
 mod scheme_data_leak;
 
 mod daemon;
-//mod eintr; // TODO
+mod eintr;
 mod fdtbl;
 mod proc;
-mod relibc_leak;
-mod syscall_bench;
+mod arch;
+mod syscall;
 mod uds;
-
-#[cfg(target_arch = "x86_64")]
-fn avx2_test() -> Result<()> {
-    let mut a: [u8; 32] = [0x41; 32];
-    let mut b: [u8; 32] = [0x42; 32];
-    unsafe {
-        core::arch::asm!("
-            vpxor ymm0, ymm0, ymm0
-            vpcmpeqb ymm1, ymm1, ymm1
-
-            mov eax, {SYS_YIELD}
-            syscall
-
-            vmovdqu [r12], ymm0
-            vmovdqu [r13], ymm1
-        ", in("r12") a.as_mut_ptr(), in("r13") b.as_mut_ptr(), out("ymm0") _, out("ymm1") _, SYS_YIELD = const syscall::SYS_YIELD);
-    }
-    assert_eq!(a, [0x00; 32]);
-    assert_eq!(b, [0xff; 32]);
-    Ok(())
-}
+mod tls;
 
 fn create_test() -> Result<()> {
     use std::fs;
@@ -189,93 +169,6 @@ fn clone_grant_using_fmap_test_inner(lazy: bool) -> Result<()> {
     let shared_ref: &'static AtomicUsize = unsafe { &*(base_ptr as *const AtomicUsize) };
 
     test_shared_ref(shared_ref);
-
-    Ok(())
-}
-
-#[cfg(target_arch = "x86_64")]
-fn redoxfs_range_bookkeeping() -> Result<()> {
-    // Number of pages
-    const P: usize = 128;
-
-    let mut chunks = vec![false; P];
-
-    // Number of operations
-    const N: usize = 10000;
-
-    let file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .read(true)
-        .open("tmp")
-        .unwrap();
-    file.set_len((P * PAGE_SIZE) as u64).unwrap();
-    let fd = file.into_raw_fd() as usize;
-
-    println!("Created file");
-
-    fn rand() -> usize {
-        let ret: usize;
-        unsafe {
-            core::arch::asm!("rdrand {}", out(reg) ret);
-        }
-        ret
-    }
-
-    for _ in 0..N {
-        let n = rand();
-        let insert_not_remove = n & (1 << (usize::BITS - 1)) != 0;
-        let idx = n % P;
-
-        if insert_not_remove {
-            let Some((first_unused, _)) = chunks
-                .iter()
-                .copied()
-                .enumerate()
-                .filter(|&(_, c)| !c)
-                .nth(idx)
-            else {
-                continue;
-            };
-            chunks[first_unused] = true;
-
-            println!("INS {}", first_unused);
-
-            unsafe {
-                let _ = syscall::fmap(
-                    fd,
-                    &Map {
-                        address: 0xDEADB000 + first_unused * PAGE_SIZE,
-                        offset: first_unused * PAGE_SIZE,
-                        flags: MapFlags::PROT_READ
-                            | MapFlags::PROT_WRITE
-                            | MapFlags::MAP_SHARED
-                            | MapFlags::MAP_FIXED,
-                        size: PAGE_SIZE,
-                    },
-                )
-                .expect("failed to fmap");
-            }
-        } else {
-            let Some((first_used, _)) = chunks
-                .iter()
-                .copied()
-                .enumerate()
-                .filter(|&(_, c)| c)
-                .nth(idx)
-            else {
-                continue;
-            };
-            chunks[first_used] = false;
-
-            println!("REM {}", first_used);
-
-            unsafe {
-                syscall::funmap(0xDEADB000 + first_used * PAGE_SIZE, PAGE_SIZE)
-                    .expect("failed to funmap");
-            }
-        }
-    }
 
     Ok(())
 }
@@ -441,64 +334,6 @@ fn anonymous_map_shared() -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_arch = "x86_64")]
-fn direction_flag_interrupt_test() -> Result<()> {
-    let thread = std::thread::spawn(|| unsafe {
-        core::arch::asm!(
-            "
-                std
-            2:
-                pause
-                jmp 2b
-            ",
-            options(noreturn)
-        );
-    });
-
-    std::thread::sleep(Duration::from_secs(1));
-
-    let pthread: libc::pthread_t = thread.into_pthread_t();
-
-    unsafe {
-        assert_eq!(libc::pthread_detach(pthread), 0);
-        assert_eq!(libc::pthread_kill(pthread, libc::SIGKILL), 0);
-    }
-
-    Ok(())
-}
-
-#[cfg(target_arch = "x86_64")]
-fn direction_flag_syscall_test() -> Result<()> {
-    let path = *b"sys:context";
-
-    let result: usize;
-
-    unsafe {
-        core::arch::asm!("
-            std
-            syscall
-            cld
-        ", inout("rax") syscall::SYS_OPEN => result, in("rdi") path.as_ptr(), in("rsi") path.len(), in("rdx") syscall::O_RDONLY, out("rcx") _, out("r11") _);
-    }
-
-    let file = syscall::Error::demux(result).unwrap();
-
-    let mut buf = [0_u8; 4096];
-
-    let result: usize;
-
-    unsafe {
-        core::arch::asm!("
-            std
-            syscall
-            cld
-        ", inout("rax") syscall::SYS_READ => result, in("rdi") file, in("rsi") buf.as_mut_ptr(), in("rdx") buf.len(), out("rcx") _, out("r11") _);
-    }
-
-    syscall::Error::demux(result).unwrap();
-
-    Ok(())
-}
 fn pipe_test() -> Result<()> {
     let read_fd = syscall::open("pipe:", O_RDONLY).expect("failed to open pipe:");
     let write_fd = syscall::dup(read_fd, b"write").expect("failed to obtain write pipe");
@@ -758,35 +593,6 @@ fn sleep_granularity_test() -> Result<()> {
         }
         println!("sleep {:?} times {} min {:?} max {:?} average {:?}", sleep, times, min, max, total / times);
     }
-    Ok(())
-}
-
-#[cfg(target_arch = "x86_64")]
-fn switch_test() -> Result<()> {
-    use x86::time::rdtscp;
-
-    let tsc = unsafe { rdtscp() };
-
-    let switch_thread = thread::spawn(|| -> usize {
-        let mut j = 0;
-        while j < 500 {
-            thread::yield_now();
-            j += 1;
-        }
-        j
-    });
-
-    let mut i = 0;
-    while i < 500 {
-        thread::yield_now();
-        i += 1;
-    }
-
-    let j = switch_thread.join().unwrap();
-
-    let dtsc = unsafe { rdtscp() } - tsc;
-    println!("P {} C {} T {}", i, j, dtsc);
-
     Ok(())
 }
 
@@ -1114,9 +920,9 @@ fn openat_test() -> Result<()> {
 */
 
 fn main() {
-    let mut tests: HashMap<&'static str, fn() -> Result<()>> = HashMap::new();
+    let mut tests: HashMap<&'static str, fn()> = HashMap::new();
     #[cfg(target_arch = "x86_64")]
-    tests.insert("avx2", avx2_test);
+    tests.insert("avx2",  arch::avx2);
     tests.insert("create_test", create_test);
     tests.insert("channel", channel_test);
     // tests.insert("page_fault", page_fault_test); // TODO
