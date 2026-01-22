@@ -1,17 +1,23 @@
 use std::convert::Infallible;
 
 use libc::c_int;
-use syscall::{
-    close, read, write, Error, Packet, Result, SchemeMut, EINTR, EIO, O_CLOEXEC, O_CREAT, O_RDWR,
-};
+use redox_scheme::scheme::SchemeSync;
+use syscall::{close, read, write, Error, Result, EINTR, EIO, O_CLOEXEC, O_CREAT, O_RDWR};
 
 #[must_use = "Daemon::ready must be called"]
 pub struct Daemon {
     write_pipe: usize,
 }
 
+pub struct DaemonGuard {
+    pid: i32,
+    #[allow(unused)]
+    res: u8,
+}
+
 impl Daemon {
-    pub fn new<F: FnOnce(Daemon) -> Infallible>(f: F) -> Result<u8> {
+    #[must_use]
+    pub fn new<F: FnOnce(Daemon) -> Infallible>(f: F) -> Result<DaemonGuard> {
         let mut pipes = [0 as c_int; 2];
         unsafe {
             assert_eq!(libc::pipe(pipes.as_mut_ptr()), 0);
@@ -19,10 +25,10 @@ impl Daemon {
 
         let [read_pipe, write_pipe] = pipes.map(|p| p as usize);
 
-        let res = unsafe { libc::fork() };
-        assert!(res >= 0);
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0);
 
-        if res == 0 {
+        if pid == 0 {
             let _ = close(read_pipe);
 
             f(Daemon { write_pipe });
@@ -38,7 +44,7 @@ impl Daemon {
             if res? == 1 {
                 //exit(data[0] as usize)?;
                 //unreachable!();
-                Ok(data[0])
+                Ok(DaemonGuard { res: data[0], pid })
             } else {
                 Err(Error::new(EIO))
             }
@@ -57,19 +63,29 @@ impl Daemon {
     }
 }
 
-pub fn scheme(name: &str, scheme_name: &str, mut scheme: impl SchemeMut) -> Result<()> {
-    Daemon::new(move |daemon: Daemon| -> std::convert::Infallible {
-        let error_handler = |error| -> ! {
+impl Drop for DaemonGuard {
+    fn drop(&mut self) {
+        unsafe { libc::kill(self.pid, libc::SIGKILL) };
+    }
+}
+
+pub fn scheme(name: &str, scheme_name: &str, mut _scheme: impl SchemeSync) -> Result<DaemonGuard> {
+    let guard = Daemon::new(move |daemon: Daemon| -> std::convert::Infallible {
+        let error_handler = |error: syscall::Error| -> ! {
             eprintln!("error in {} daemon: {}", name, error);
             std::process::exit(1)
         };
 
-        let socket = syscall::open(format!(":{}", scheme_name), O_CREAT | O_RDWR | O_CLOEXEC)
-            .unwrap_or_else(|error| error_handler(error));
+        let socket = libredox::call::open(
+            format!(":{}", scheme_name),
+            (O_CREAT | O_RDWR | O_CLOEXEC) as i32,
+            0,
+        )
+        .unwrap_or_else(|error| error_handler(error.into()));
 
         daemon.ready().unwrap_or_else(|error| error_handler(error));
 
-        let mut packet = Packet::default();
+        let mut packet = [0; 4096];
 
         'outer: loop {
             'read: loop {
@@ -80,7 +96,7 @@ pub fn scheme(name: &str, scheme_name: &str, mut scheme: impl SchemeMut) -> Resu
                     Err(other) => error_handler(other),
                 }
             }
-            scheme.handle(&mut packet);
+            // scheme.handle(&mut packet);
             'write: loop {
                 match syscall::write(socket, &packet) {
                     Ok(0) => break 'outer,
@@ -95,5 +111,5 @@ pub fn scheme(name: &str, scheme_name: &str, mut scheme: impl SchemeMut) -> Resu
         std::process::exit(0);
     })?;
 
-    Ok(())
+    Ok(guard)
 }

@@ -2,13 +2,23 @@
 
 Redox general-purpose test suite.
 
-It contains tests to detect regressions, race conditions, kernel faults, incorrect kernel behavior and others.
+It contains tests to detect regressions, race conditions, kernel faults, incorrect kernel behavior, anything that internal Redox API exposed. 
 
-The following tests are allowed:
+This test suite does not test relibc behavior or POSIX conformance, those should be in [relibc tests](https://gitlab.redox-os.org/redox-os/relibc#tests).
 
-- Logic tests
-- Stress tests
-- Performance tests (mainly cost of operations)
+## Running test
+
+Two primary way to run tests:
+
+### Cargo
+
+Clone this repository in Redox OS, then either run `cargo test` or `cargo bench`. Use this if you just want to see if the test passed or not, or get a consistent overall benchmark result.
+
+If you are trying to run the test outside Redox OS, use [`redoxer`](https://crates.io/crates/redoxer) to run the test inside an emulation.
+
+### Test binary
+
+Build this repository in Redox OS, or install using `pkg install acid`, then run `acid [test-name]`. 
 
 ## Tests
 

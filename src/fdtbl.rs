@@ -80,7 +80,7 @@ fn receive_fds(receiver_sock: usize, dst_fds: &mut [usize], flags: CallFlags) ->
     )?)
 }
 
-fn test_send_moved_fd_fails_with_ebadf() -> anyhow::Result<()> {
+fn test_send_moved_fd_fails_with_ebadf() -> Result<()> {
     println!("\n[TEST] Sending a moved FD fails with EBADF");
     let (receiver, sender) = create_socket_pair()?;
     let fd = prepare_fd_to_send("move_and_fail")?;
@@ -106,7 +106,7 @@ fn test_send_moved_fd_fails_with_ebadf() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_send_cloned_fd_remains_valid() -> anyhow::Result<()> {
+fn test_send_cloned_fd_remains_valid() -> Result<()> {
     println!("\n[TEST] Sending a cloned FD remains valid on the sender side");
     let (receiver, sender) = create_socket_pair()?;
     let fd = prepare_fd_to_send("clone_and_verify")?;
@@ -127,7 +127,7 @@ fn test_send_cloned_fd_remains_valid() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_auto_alloc_to_posix_table() -> anyhow::Result<()> {
+fn test_auto_alloc_to_posix_table() -> Result<()> {
     println!("\n[TEST] Automatic allocation to POSIX table");
     let (receiver, sender) = create_socket_pair()?;
     let fd1 = prepare_fd_to_send("posix_auto1")?;
@@ -150,7 +150,7 @@ fn test_auto_alloc_to_posix_table() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_auto_alloc_to_upper_table() -> anyhow::Result<()> {
+fn test_auto_alloc_to_upper_table() -> Result<()> {
     println!("\n[TEST] Automatic allocation to upper table");
     let (receiver, sender) = create_socket_pair()?;
     let fd1 = prepare_fd_to_send("upper_auto1")?;
@@ -175,7 +175,7 @@ fn test_auto_alloc_to_upper_table() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_manual_alloc_to_upper_table() -> anyhow::Result<()> {
+fn test_manual_alloc_to_upper_table() -> Result<()> {
     println!("\n[TEST] Manual allocation to upper table");
     let (receiver, sender) = create_socket_pair()?;
     let fd1 = prepare_fd_to_send("upper_manual1")?;
@@ -198,7 +198,7 @@ fn test_manual_alloc_to_upper_table() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_manual_alloc_invalid_slot_fails_with_emfile() -> anyhow::Result<()> {
+fn test_manual_alloc_invalid_slot_fails_with_emfile() -> Result<()> {
     println!("\n[TEST] Manual allocation to an invalid upper slot fails with EMFILE");
     let (receiver, sender) = create_socket_pair()?;
     let fd = prepare_fd_to_send("should_fail_emfile")?;
@@ -219,7 +219,7 @@ fn test_manual_alloc_invalid_slot_fails_with_emfile() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_manual_alloc_to_occupied_slot_fails_with_eexist() -> anyhow::Result<()> {
+fn test_manual_alloc_to_occupied_slot_fails_with_eexist() -> Result<()> {
     println!("\n[TEST] Manual allocation to an occupied upper slot fails with EEXIST");
     let (receiver, sender) = create_socket_pair()?;
 
@@ -246,7 +246,7 @@ fn test_manual_alloc_to_occupied_slot_fails_with_eexist() -> anyhow::Result<()> 
     Ok(())
 }
 
-fn test_send_fails_with_ebusy() -> anyhow::Result<()> {
+fn test_send_fails_with_ebusy() -> Result<()> {
     println!("\n[TEST] Sending an fd fails with EBUSY");
     let (receiver, sender) = create_socket_pair()?;
 
@@ -267,7 +267,7 @@ fn test_send_fails_with_ebusy() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_receive_buffer_too_small() -> anyhow::Result<()> {
+fn test_receive_buffer_too_small() -> Result<()> {
     println!("\n[TEST] Behavior when receive buffer is smaller than sent FDs");
     let (receiver, sender) = create_socket_pair()?;
     let fd1 = prepare_fd_to_send("buf_small1")?;
@@ -298,7 +298,7 @@ fn test_receive_buffer_too_small() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_receive_buffer_too_large() -> anyhow::Result<()> {
+fn test_receive_buffer_too_large() -> Result<()> {
     println!("\n[TEST] Behavior when receive buffer is larger than sent FDs");
     let (receiver, sender) = create_socket_pair()?;
     unsafe { libc::fcntl(receiver as i32, libc::F_SETFL, libc::O_NONBLOCK) };
@@ -335,7 +335,7 @@ fn test_receive_buffer_too_large() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn test_send_and_recv_zero_fds() -> anyhow::Result<()> {
+fn test_send_and_recv_zero_fds() -> Result<()> {
     println!("\n[TEST] Sending and receiving zero FDs");
     let (receiver, sender) = create_socket_pair()?;
 
@@ -353,7 +353,11 @@ fn test_send_and_recv_zero_fds() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_all() -> anyhow::Result<()> {
+pub fn run_all() {
+    run_all_inner().unwrap()
+}
+
+fn run_all_inner() -> Result<()> {
     println!("\n--- FdTbl Tests ---");
 
     test_send_moved_fd_fails_with_ebadf()?;
@@ -370,4 +374,55 @@ pub fn run_all() -> anyhow::Result<()> {
 
     println!("\n--- FdTbl Tests Passed Successfully ---");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+    use super::*;
+
+    #[test]
+    fn test_fdbtl_send_moved_fd_fails_with_ebadf() {
+        test_send_moved_fd_fails_with_ebadf().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_send_cloned_fd_remains_valid() {
+        test_send_cloned_fd_remains_valid().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_auto_alloc_to_posix_table() {
+        test_auto_alloc_to_posix_table().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_auto_alloc_to_upper_table() {
+        test_auto_alloc_to_upper_table().unwrap()
+    }
+    // #[test]
+    // fn test_fdbtl_manual_alloc_to_upper_table() {
+    //     test_manual_alloc_to_upper_table().unwrap()
+    // }
+    #[test]
+    fn test_fdbtl_manual_alloc_invalid_slot_fails_with_emfile() {
+        test_manual_alloc_invalid_slot_fails_with_emfile().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_manual_alloc_to_occupied_slot_fails_with_eexist() {
+        test_manual_alloc_to_occupied_slot_fails_with_eexist().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_send_fails_with_ebusy() {
+        test_send_fails_with_ebusy().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_receive_buffer_too_small() {
+        test_receive_buffer_too_small().unwrap()
+    }
+    // #[test]
+    // fn test_fdbtl_receive_buffer_too_large() {
+    //     test_receive_buffer_too_large().unwrap()
+    // }
+    #[test]
+    fn test_fdbtl_send_and_recv_zero_fds() {
+        test_send_and_recv_zero_fds().unwrap()
+    }
 }
