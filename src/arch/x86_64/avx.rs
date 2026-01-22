@@ -21,7 +21,6 @@ pub fn avx2() {
 mod tests {
     extern crate test;
     use super::*;
-    use test::Bencher;
 
     #[test]
     fn test_avx2() {

@@ -89,6 +89,6 @@ mod tests {
 
     #[bench]
     fn bench_redoxfs_range_bookkeeping(b: &mut Bencher) {
-        redoxfs_range_bookkeeping()
+        b.iter(|| redoxfs_range_bookkeeping())
     }
 }

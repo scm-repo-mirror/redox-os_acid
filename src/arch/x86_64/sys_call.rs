@@ -89,6 +89,7 @@ mod tests {
         invalid_syscall()
     }
 
+    // throwing SIGKILL
     // #[test]
     // fn test_direction_flag_syscall() {
     //     direction_flag_syscall()
@@ -103,9 +104,4 @@ mod tests {
     fn bench_invalid_syscall(b: &mut Bencher) {
         b.iter(|| invalid_syscall())
     }
-
-    // #[bench]
-    // fn bench_direction_flag_syscall(b: &mut Bencher) {
-    //     b.iter(|| direction_flag_syscall())
-    // }
 }

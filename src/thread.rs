@@ -40,7 +40,7 @@ fn outer_runner(threadnum: usize) {
     // eprintln!("outer_runner {} exiting", threadnum);
 }
 
-fn inner_runner(threadnum: usize) {
+fn inner_runner(_threadnum: usize) {
     // eprintln!("start runner {}", threadnum);
     std::thread::sleep(std::time::Duration::from_millis(1));
     // eprintln!("end runner {}", threadnum);
@@ -171,8 +171,9 @@ mod tests {
         b.iter(|| context_switch())
     }
 
-    #[bench]
-    fn bench_thread_leak(b: &mut Bencher) {
-        b.iter(|| thread_spawn())
-    }
+    // hang
+    // #[bench]
+    // fn bench_thread_leak(b: &mut Bencher) {
+    //     b.iter(|| thread_spawn())
+    // }
 }

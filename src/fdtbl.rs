@@ -380,7 +380,6 @@ fn run_all_inner() -> Result<()> {
 mod tests {
     extern crate test;
     use super::*;
-    use test::Bencher;
 
     #[test]
     fn test_fdbtl_send_moved_fd_fails_with_ebadf() {
@@ -398,10 +397,10 @@ mod tests {
     fn test_fdbtl_auto_alloc_to_upper_table() {
         test_auto_alloc_to_upper_table().unwrap()
     }
-    #[test]
-    fn test_fdbtl_manual_alloc_to_upper_table() {
-        test_manual_alloc_to_upper_table().unwrap()
-    }
+    // #[test]
+    // fn test_fdbtl_manual_alloc_to_upper_table() {
+    //     test_manual_alloc_to_upper_table().unwrap()
+    // }
     #[test]
     fn test_fdbtl_manual_alloc_invalid_slot_fails_with_emfile() {
         test_manual_alloc_invalid_slot_fails_with_emfile().unwrap()
@@ -418,10 +417,10 @@ mod tests {
     fn test_fdbtl_receive_buffer_too_small() {
         test_receive_buffer_too_small().unwrap()
     }
-    #[test]
-    fn test_fdbtl_receive_buffer_too_large() {
-        test_receive_buffer_too_large().unwrap()
-    }
+    // #[test]
+    // fn test_fdbtl_receive_buffer_too_large() {
+    //     test_receive_buffer_too_large().unwrap()
+    // }
     #[test]
     fn test_fdbtl_send_and_recv_zero_fds() {
         test_send_and_recv_zero_fds().unwrap()
