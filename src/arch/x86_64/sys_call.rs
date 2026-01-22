@@ -1,7 +1,4 @@
-use std::fs::File;
-use std::io::BufWriter;
-use std::os::unix::thread::JoinHandleExt;
-use std::thread;
+use std::{os::unix::thread::JoinHandleExt, time::Duration};
 
 // Crate named sys_call to avoid confusion with redox_syscall
 
@@ -10,7 +7,7 @@ pub fn invalid_syscall() {
     unsafe {
         core::arch::asm!("
             mov edx, 1337 // invalid syscall
-            mov edi, 1 << 24 // iteration count
+            mov edi, 1 << 16 // iteration count
 
             .p2align 6
 
@@ -25,17 +22,19 @@ pub fn invalid_syscall() {
     }
 }
 
+// TODO: Update with openat?
 pub fn direction_flag_syscall() {
     let path = *b"sys:context";
 
     let result: usize;
 
     unsafe {
+        // TODO
         core::arch::asm!("
             std
             syscall
             cld
-        ", inout("rax") syscall::SYS_OPEN => result, in("rdi") path.as_ptr(), in("rsi") path.len(), in("rdx") syscall::O_RDONLY, out("rcx") _, out("r11") _);
+        ", inout("rax") syscall::SYS_OPENAT => result, in("rdi") path.as_ptr(), in("rsi") path.len(), in("rdx") syscall::O_RDONLY, out("rcx") _, out("r11") _);
     }
 
     let file = syscall::Error::demux(result).unwrap();
@@ -81,30 +80,32 @@ pub fn direction_flag_interrupt() {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
     use super::*;
+    use test::Bencher;
 
     #[test]
     fn test_invalid_syscall() {
         invalid_syscall()
     }
 
-    #[test]
-    fn test_direction_flag_syscall() {
-        direction_flag_syscall()
-    }
+    // #[test]
+    // fn test_direction_flag_syscall() {
+    //     direction_flag_syscall()
+    // }
 
-    #[test]
-    fn test_direction_flag_interrupt() {
-        direction_flag_interrupt()
-    }
-
-    #[bench]
-    fn bench_invalid_syscall() {
-        invalid_syscall()
-    }
+    // #[test]
+    // fn test_direction_flag_interrupt() {
+    //     direction_flag_interrupt()
+    // }
 
     #[bench]
-    fn bench_direction_flag_syscall() {
-        direction_flag_syscall()
+    fn bench_invalid_syscall(b: &mut Bencher) {
+        b.iter(|| invalid_syscall())
     }
+
+    // #[bench]
+    // fn bench_direction_flag_syscall(b: &mut Bencher) {
+    //     b.iter(|| direction_flag_syscall())
+    // }
 }

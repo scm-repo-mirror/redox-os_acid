@@ -1,6 +1,7 @@
 
 use std::thread;
 use syscall::{Error, EINTR};
+use libredox::flag::O_CREAT;
 
 // TODO
 pub fn eintr() {
@@ -25,8 +26,8 @@ pub fn eintr() {
     });
 
 
-    let listener = syscall::open("chan:acid", syscall::O_CREAT).unwrap();
-    let _writer2 = syscall::open("chan:acid", 0).unwrap();
+    let listener = libredox::call::open("chan:acid", O_CREAT).unwrap();
+    let _writer2 = libredox::call::open("chan:acid", 0).unwrap();
     let reader2 = syscall::dup(listener, b"listen").unwrap();
 
     let _ = syscall::write(writer1, &[0]);
@@ -126,7 +127,7 @@ fn openat_test() -> Result<()> {
         let test_file = format!("{}/notdir_test", folder_path);
         std::fs::write(&test_file, b"test content")?;
 
-        let file_fd = syscall::open(&test_file, O_RDONLY)?;
+        let file_fd = libredox::call::open(&test_file, O_RDONLY)?;
         let notdir_result = syscall::openat(file_fd, "some_file", O_RDONLY)
             .expect_err("Expected an error for not directory");
         assert_eq!(
@@ -180,7 +181,7 @@ fn openat_test() -> Result<()> {
         let new_dir = format!("{}/renamed_dir", path);
 
         std::fs::create_dir(&orig_dir)?;
-        let dir_fd = syscall::open(&orig_dir, O_DIRECTORY | O_RDONLY)?;
+        let dir_fd = libredox::call::open(&orig_dir, O_DIRECTORY | O_RDONLY)?;
         std::fs::rename(&orig_dir, &new_dir)?;
 
         let fd = syscall::openat(dir_fd, "file_after_rename", O_CREAT | O_RDWR)?;
@@ -198,7 +199,7 @@ fn openat_test() -> Result<()> {
 
     let path = "/scheme/file/openat_test";
     // Create the directory if it doesn't exist
-    let raw_fd = syscall::open(&path, O_CREAT | O_DIRECTORY)? as _;
+    let raw_fd = libredox::call::open(&path, O_CREAT | O_DIRECTORY)? as _;
     if raw_fd < 0 {
         bail!("Failed to open directory");
     }

@@ -30,6 +30,7 @@ struct Ucred {
 pub mod dgram_tests {
     use super::{socket_kind, PATH_MAX};
     use libc::{bind, close};
+    use libredox::flag::O_CREAT;
     use std::fs::remove_file;
     use std::{ffi::CString, io, mem, thread, time::Duration};
 
@@ -37,15 +38,11 @@ pub mod dgram_tests {
 
     fn create_socket() -> i32 {
         let (_, flags) = socket_kind(libc::AF_UNIX);
-        let socket: i32 = syscall::open("/scheme/uds_dgram", flags | syscall::O_CREAT)
-            .unwrap()
-            .try_into()
-            .unwrap();
-
+        let socket =
+            libredox::call::open("/scheme/uds_stream", (flags as i32) | O_CREAT, 0).unwrap() as i32;
         if socket < 0 {
             panic!("libc err {}", io::Error::last_os_error());
         }
-
         socket
     }
 
@@ -306,15 +303,22 @@ pub mod dgram_tests {
 pub mod stream_tests {
     use super::{socket_kind, PATH_MAX};
     use libc::{accept, bind, close, connect, sockaddr};
+    use libredox::flag::O_CREAT;
     use std::fs::remove_file;
     use std::{ffi::CString, io, mem, thread};
-    use syscall::{self, error::*};
+    use syscall;
 
     const SOCKET_PATH: &str = "test_stream.sock";
 
     fn create_socket() -> i32 {
         let (_, flags) = socket_kind(libc::AF_UNIX);
-        let socket = syscall::open("/scheme/uds_stream", flags | syscall::O_CREAT).unwrap() as i32;
+        let socket = libredox::call::openat(
+            libredox::call::getns().unwrap(),
+            "/scheme/uds_stream",
+            (flags as i32) | O_CREAT,
+            0,
+        )
+        .unwrap() as i32;
         if socket < 0 {
             panic!("libc err {}", io::Error::last_os_error());
         }
@@ -602,7 +606,7 @@ pub mod stream_tests {
         assert_eq!(connect_result, -1, "Second connect should fail");
         assert_eq!(
             io::Error::last_os_error().raw_os_error(),
-            Some(EISCONN),
+            Some(syscall::EISCONN),
             "Error should be EISCONN"
         );
         println!("[STREAM OK] Reconnecting failed with EISCONN as expected.");
@@ -2088,7 +2092,9 @@ pub mod stream_msghdr_tests {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
     use super::*;
+    use test::Bencher;
 
     #[test]
     fn test_dgram() {
@@ -2111,22 +2117,22 @@ mod tests {
     }
 
     #[bench]
-    fn bench_dgram() {
-        dgram_tests::run_all();
+    fn bench_dgram(b: &mut Bencher) {
+        b.iter(|| dgram_tests::run_all());
     }
 
     #[bench]
-    fn bench_stream() {
-        stream_tests::run_all();
+    fn bench_stream(b: &mut Bencher) {
+        b.iter(|| stream_tests::run_all());
     }
 
     #[bench]
-    fn bench_dgram_msghdr() {
-        dgram_msghdr_tests::run_all();
+    fn bench_dgram_msghdr(b: &mut Bencher) {
+        b.iter(|| dgram_msghdr_tests::run_all());
     }
 
     #[bench]
-    fn bench_stream_msghdr() {
-        stream_msghdr_tests::run_all();
+    fn bench_stream_msghdr(b: &mut Bencher) {
+        b.iter(|| stream_msghdr_tests::run_all());
     }
 }

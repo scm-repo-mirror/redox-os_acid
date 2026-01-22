@@ -1,3 +1,7 @@
+use std::{fs::OpenOptions, os::fd::IntoRawFd};
+
+use syscall::{Map, MapFlags, PAGE_SIZE};
+
 // TODO: Probably this is arch-independent test
 pub fn redoxfs_range_bookkeeping() {
     // Number of pages
@@ -79,10 +83,12 @@ pub fn redoxfs_range_bookkeeping() {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
     use super::*;
+    use test::Bencher;
 
     #[bench]
-    fn bench_redoxfs_range_bookkeeping() {
+    fn bench_redoxfs_range_bookkeeping(b: &mut Bencher) {
         redoxfs_range_bookkeeping()
     }
 }

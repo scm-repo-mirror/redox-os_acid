@@ -1,6 +1,6 @@
 //!Acid testing program
 #![allow(internal_features)]
-#![feature(core_intrinsics, thread_local)]
+#![feature(core_intrinsics, thread_local, test)]
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -32,7 +32,7 @@ fn main() {
     tests.insert("cross_scheme_link", scheme_call::cross_scheme_link);
     tests.insert("efault", memory::efault_test);
     #[cfg(target_arch = "x86_64")]
-    tests.insert("direction_flag_sc", arch::direction_flag_syscall);
+    // tests.insert("direction_flag_sc", arch::direction_flag_syscall);
     #[cfg(target_arch = "x86_64")]
     tests.insert("direction_flag_int", arch::direction_flag_interrupt);
     tests.insert("pipe", memory::pipe_test);

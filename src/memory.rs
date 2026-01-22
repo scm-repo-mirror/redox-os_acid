@@ -1,7 +1,13 @@
 use std::{
-    fs::{File, OpenOptions}, hash::{DefaultHasher, Hasher}, io::{Read, Write}, os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd}, sync::{
-        Barrier, atomic::{AtomicUsize, Ordering}
-    }, thread
+    fs::{File, OpenOptions},
+    hash::{DefaultHasher, Hasher},
+    io::{Read, Write},
+    os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Barrier,
+    },
+    thread,
 };
 
 use syscall::{Map, MapFlags, PAGE_SIZE};
@@ -49,7 +55,12 @@ fn clone_grant_using_fmap_test_inner(lazy: bool) {
         MapFlags::empty()
     };
 
-    let mem = syscall::open("shm:clone_grant_using_fmap_test", syscall::O_CLOEXEC).unwrap();
+    let mem = libredox::call::open(
+        "shm:clone_grant_using_fmap_test",
+        syscall::O_CLOEXEC as i32,
+        0,
+    )
+    .unwrap();
     let base_ptr = unsafe {
         syscall::fmap(
             mem,
@@ -228,7 +239,8 @@ pub fn anonymous_map_shared() {
 }
 
 pub fn pipe_test() {
-    let read_fd = syscall::open("pipe:", syscall::O_RDONLY).expect("failed to open pipe:");
+    let read_fd =
+        libredox::call::open("pipe:", libredox::flag::O_RDONLY, 0).expect("failed to open pipe:");
     let write_fd = syscall::dup(read_fd, b"write").expect("failed to obtain write pipe");
 
     let barrier = Barrier::new(2);

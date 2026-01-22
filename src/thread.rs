@@ -151,7 +151,9 @@ pub fn tls() {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
     use super::*;
+    use test::Bencher;
 
     #[test]
     fn test_tls() {
@@ -169,12 +171,12 @@ mod tests {
     }
 
     #[bench]
-    fn bench_context_switch() {
+    fn bench_context_switch(b: &mut Bencher) {
         context_switch()
     }
 
     #[bench]
-    fn bench_thread_leak() {
+    fn bench_thread_leak(b: &mut Bencher) {
         thread_spawn()
     }
 }
