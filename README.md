@@ -14,13 +14,11 @@ Two primary way to run tests:
 
 Clone this repository in Redox OS, then either run `cargo test` or `cargo bench`. Use this if you just want to see if the test passed or not, or get a consistent overall benchmark result.
 
+If you are trying to run the test outside Redox OS, use [`redoxer`](https://crates.io/crates/redoxer) to run the test inside an emulation.
+
 ### Test binary
 
-Build this repository in Redox OS, or install using `pkg install acid`, then run `acid [test-name] -n [times] -j [cpu] [--quiet]`. Use this if you want to deep analyze a specific test, like to see if some memory leaking or detect slowness.
-
-To run the test indefinitely, use `-n 0`. To run the test on all CPU, use `-j max`. If any of these options are used, the test runner will not pipe any stdout (only stderr). Stdout will only be used to tell the statistics. If you have external performance instrumentation already running, use `--quiet` to discard any stdout/stderr so the test bench will be accurate.
-
-Please note that tests that require daemon require to be run as root. These tests also ignored by default on `cargo test`.
+Build this repository in Redox OS, or install using `pkg install acid`, then run `acid [test-name]`. 
 
 ## Tests
 
