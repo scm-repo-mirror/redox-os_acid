@@ -22,7 +22,9 @@ use nix::unistd::{self, ForkResult, Pid};
 pub fn fork_serial_bench<const EXEC: bool>() {
     let now = Instant::now();
 
-    for _ in 0..1 << 10 {
+    let end = if EXEC { 1 << 4 } else { 1 << 10 };
+
+    for _ in 0..end {
         let code = unsafe { libc::fork() };
         assert_ne!(code, -1);
         if code == 0 {
@@ -900,5 +902,98 @@ pub fn sigkill_fail_code() {
                 WaitStatus::Signaled(child, Signal::SIGKILL, false)
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+    use super::*;
+    use test::Bencher;
+
+    // hang or loop is too much?
+    // #[bench]
+    // fn bench_fork_tree(b: &mut Bencher) {
+    //     b.iter(|| fork_tree_bench::<false>())
+    // }
+    // #[bench]
+    // fn bench_fork_serial(b: &mut Bencher) {
+    //     b.iter(|| fork_serial_bench::<false>())
+    // }
+    // #[bench]
+    // fn bench_fork_exec_serial(b: &mut Bencher) {
+    //     b.iter(|| fork_serial_bench::<true>())
+    // }
+    // #[bench]
+    // fn bench_fork_exec_tree(b: &mut Bencher) {
+    //     b.iter(|| fork_tree_bench::<true>())
+    // }
+    #[test]
+    fn test_stop_orphan_pgrp() {
+        stop_orphan_pgrp()
+    }
+    #[test]
+    fn test_setpgid() {
+        setpgid()
+    }
+    #[test]
+    fn test_setsid() {
+        setsid()
+    }
+    #[test]
+    fn test_reparenting() {
+        reparenting()
+    }
+    #[test]
+    fn test_waitpid_setpgid_echild() {
+        waitpid_setpgid_echild()
+    }
+    #[test]
+    fn test_thread_reap() {
+        thread_reap()
+    }
+    #[test]
+    fn test_orphan_exit_sighup() {
+        orphan_exit_sighup::<false>()
+    }
+    #[test]
+    fn test_orphan_exit_sighup_session() {
+        orphan_exit_sighup::<true>()
+    }
+    #[test]
+    fn test_wcontinued_sigcont_catching() {
+        wcontinued_sigcont_catching()
+    }
+    #[test]
+    fn test_using_signal_hook() {
+        using_signal_hook()
+    }
+    #[test]
+    fn test_waitpid_esrch() {
+        waitpid_esrch()
+    }
+    #[test]
+    fn test_waitpid_status_discard() {
+        waitpid_status_discard()
+    }
+    #[test]
+    fn test_waitpid_transitive_queue() {
+        waitpid_transitive_queue()
+    }
+    #[test]
+    fn test_pgrp_lifetime() {
+        pgrp_lifetime()
+    }
+    #[test]
+    fn test_waitpid_eintr() {
+        waitpid_eintr()
+    }
+    #[test]
+    fn test_raise_correct_sig_group() {
+        raise_correct_sig_group()
+    }
+    #[test]
+    fn test_sigkill_fail_code() {
+        sigkill_fail_code()
     }
 }

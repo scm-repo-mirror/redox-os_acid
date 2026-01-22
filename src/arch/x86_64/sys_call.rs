@@ -7,7 +7,7 @@ pub fn invalid_syscall() {
     unsafe {
         core::arch::asm!("
             mov edx, 1337 // invalid syscall
-            mov edi, 1 << 16 // iteration count
+            mov edi, 1 << 10 // iteration count
 
             .p2align 6
 

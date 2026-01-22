@@ -375,3 +375,55 @@ fn run_all_inner() -> Result<()> {
     println!("\n--- FdTbl Tests Passed Successfully ---");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+    use super::*;
+    use test::Bencher;
+
+    #[test]
+    fn test_fdbtl_send_moved_fd_fails_with_ebadf() {
+        test_send_moved_fd_fails_with_ebadf().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_send_cloned_fd_remains_valid() {
+        test_send_cloned_fd_remains_valid().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_auto_alloc_to_posix_table() {
+        test_auto_alloc_to_posix_table().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_auto_alloc_to_upper_table() {
+        test_auto_alloc_to_upper_table().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_manual_alloc_to_upper_table() {
+        test_manual_alloc_to_upper_table().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_manual_alloc_invalid_slot_fails_with_emfile() {
+        test_manual_alloc_invalid_slot_fails_with_emfile().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_manual_alloc_to_occupied_slot_fails_with_eexist() {
+        test_manual_alloc_to_occupied_slot_fails_with_eexist().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_send_fails_with_ebusy() {
+        test_send_fails_with_ebusy().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_receive_buffer_too_small() {
+        test_receive_buffer_too_small().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_receive_buffer_too_large() {
+        test_receive_buffer_too_large().unwrap()
+    }
+    #[test]
+    fn test_fdbtl_send_and_recv_zero_fds() {
+        test_send_and_recv_zero_fds().unwrap()
+    }
+}

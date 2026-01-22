@@ -5,7 +5,7 @@ use std::thread;
 pub fn context_switch() {
     let switch_thread = thread::spawn(|| -> usize {
         let mut j = 0;
-        while j < 500 {
+        while j < 10000 {
             thread::yield_now();
             j += 1;
         }
@@ -13,7 +13,7 @@ pub fn context_switch() {
     });
 
     let mut i = 0;
-    while i < 500 {
+    while i < 10000 {
         thread::yield_now();
         i += 1;
     }
@@ -23,7 +23,7 @@ pub fn context_switch() {
 
 pub fn thread_spawn() {
     // Same loop count with context_switch
-    for _ in 1..100 {
+    for _ in 1..10000 {
         let mut thread_list = vec![];
         for j in 1..5 {
             thread_list.push(std::thread::spawn(move || outer_runner(j)));
@@ -35,19 +35,15 @@ pub fn thread_spawn() {
 }
 
 fn outer_runner(threadnum: usize) {
-    // println!("outer_runner {}", threadnum);
-    eprintln!("outer_runner {}", threadnum);
+    // eprintln!("outer_runner {}", threadnum);
     inner_runner(threadnum);
-    // println!("outer_runner {} exiting", threadnum);
-    eprintln!("outer_runner {} exiting", threadnum);
+    // eprintln!("outer_runner {} exiting", threadnum);
 }
 
 fn inner_runner(threadnum: usize) {
-    // println!("start runner {}", threadnum);
-    eprintln!("start runner {}", threadnum);
+    // eprintln!("start runner {}", threadnum);
     std::thread::sleep(std::time::Duration::from_millis(1));
-    // println!("end runner {}", threadnum);
-    eprintln!("end runner {}", threadnum);
+    // eprintln!("end runner {}", threadnum);
 }
 
 pub fn channel() {
@@ -172,11 +168,11 @@ mod tests {
 
     #[bench]
     fn bench_context_switch(b: &mut Bencher) {
-        context_switch()
+        b.iter(|| context_switch())
     }
 
     #[bench]
     fn bench_thread_leak(b: &mut Bencher) {
-        thread_spawn()
+        b.iter(|| thread_spawn())
     }
 }

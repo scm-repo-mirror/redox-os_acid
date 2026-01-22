@@ -27,9 +27,4 @@ mod tests {
     fn test_avx2() {
         avx2()
     }
-
-    #[bench]
-    fn bench_avx2(b: &mut Bencher) {
-        avx2()
-    }
 }

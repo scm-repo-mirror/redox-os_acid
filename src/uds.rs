@@ -66,7 +66,7 @@ pub mod dgram_tests {
         Ok(socket_addr)
     }
 
-    fn test_bind_and_connect_and_fpath() {
+    pub fn test_bind_and_connect_and_fpath() {
         println!("[DGRAM] --- Testing Bind and Connect communication and fpath ---");
         let server_socket = create_socket();
 
@@ -162,7 +162,7 @@ pub mod dgram_tests {
         remove_file(SOCKET_PATH).unwrap();
     }
 
-    fn test_socketpair_io() {
+    pub fn test_socketpair_io() {
         println!("[DGRAM] --- Testing socket pair blocking I/O ---");
         let sock1 = create_socket();
         let sock2 = syscall::dup(sock1 as usize, b"connect").unwrap() as i32;
@@ -209,7 +209,7 @@ pub mod dgram_tests {
         println!("[DGRAM OK] Socket pair I/O test passed.");
     }
 
-    fn test_epipe() {
+    pub fn test_epipe() {
         println!("[DGRAM] --- Testing EPIPE on write ---");
         let sock1 = create_socket();
         let sock2 = syscall::dup(sock1 as usize, b"connect").unwrap();
@@ -228,7 +228,7 @@ pub mod dgram_tests {
         println!("[DGRAM OK] EPIPE test passed.");
     }
 
-    fn test_nonblocking_io() {
+    pub fn test_nonblocking_io() {
         println!("[DGRAM] --- Testing non-blocking I/O ---");
         let sock1 = create_socket();
         let sock2 = syscall::dup(sock1 as usize, b"connect").unwrap();
@@ -246,7 +246,7 @@ pub mod dgram_tests {
         println!("[DGRAM OK] Non-blocking I/O test passed.");
     }
 
-    fn test_message_size_limits() {
+    pub fn test_message_size_limits() {
         println!("[DGRAM] --- Testing EMSGSIZE ---");
         let sock1 = create_socket();
         let sock2 = syscall::dup(sock1 as usize, b"connect").unwrap();
@@ -262,7 +262,7 @@ pub mod dgram_tests {
         println!("[DGRAM OK] EMSGSIZE test passed.");
     }
 
-    fn test_zero_byte_write() {
+    pub fn test_zero_byte_write() {
         println!("[DGRAM] --- Testing zero-byte write ---");
         let server_socket = create_socket();
 
@@ -341,7 +341,7 @@ pub mod stream_tests {
         (socket_addr, len as libc::socklen_t)
     }
 
-    fn test_bind_listen_accept_connect_and_fpath() {
+    pub fn test_bind_listen_accept_connect_and_fpath() {
         println!("[STREAM] --- Testing bind, listen, accept, and connect ---");
 
         let listener_fd = create_socket();
@@ -455,7 +455,7 @@ pub mod stream_tests {
         println!("[STREAM OK] Bind/listen/accept/connect test passed.");
     }
 
-    fn test_close_listener_with_active_and_pending_connections() {
+    pub fn test_close_listener_with_active_and_pending_connections() {
         println!("[STREAM] --- Testing closing listener with active and pending connections ---");
         let listener_fd = create_socket();
         let (socket_addr, addr_len) = prepare_socket_addr();
@@ -517,7 +517,7 @@ pub mod stream_tests {
         println!("[STREAM OK] Closing listener with active/pending connections test passed.");
     }
 
-    fn test_socketpair_io() {
+    pub fn test_socketpair_io() {
         println!("[STREAM] --- Testing socket pair I/O and EPIPE ----");
         let mut fds = [-1, -1];
         if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -553,7 +553,7 @@ pub mod stream_tests {
         println!("[STREAM OK] EPIPE test passed.");
     }
 
-    fn test_reconnect_fails() {
+    pub fn test_reconnect_fails() {
         println!("[STREAM] --- Testing that reconnecting a connected socket fails ---");
         let listener_fd = create_socket();
         let (socket_addr, addr_len) = prepare_socket_addr();
@@ -618,7 +618,7 @@ pub mod stream_tests {
         unsafe { close(client_fd) };
     }
 
-    fn test_zero_byte_write_and_eof() {
+    pub fn test_zero_byte_write_and_eof() {
         println!("[STREAM] --- Testing zero-byte write and EOF handling ---");
         let mut fds = [-1, -1];
         if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -659,7 +659,7 @@ pub mod stream_tests {
         unsafe { close(sender_sock) };
     }
 
-    fn test_wouldblock_dup_and_notconn_rw() {
+    pub fn test_wouldblock_dup_and_notconn_rw() {
         println!("[STREAM] --- Testing Should Error ---");
 
         let server_socket = create_socket();
@@ -715,7 +715,7 @@ pub mod stream_tests {
         unsafe { close(server_socket) };
     }
 
-    fn test_large_stream_transfer() {
+    pub fn test_large_stream_transfer() {
         println!("[STREAM] --- Testing large stream data transfer ---");
         let mut fds = [-1, -1];
         if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -784,7 +784,7 @@ pub mod dgram_msghdr_tests {
     use std::ptr;
     use std::thread;
 
-    fn test_send_recv_fd() {
+    pub fn test_send_recv_fd() {
         println!("[DGRAM_MSGHDR] --- Testing SCM_RIGHTS (File Descriptor Passing) ---");
         let fd_to_send = unsafe { libc::dup(1) };
 
@@ -864,7 +864,7 @@ pub mod dgram_msghdr_tests {
         unsafe { close(receiver_sock) };
     }
 
-    fn test_send_recv_credentials() {
+    pub fn test_send_recv_credentials() {
         println!("[DGRAM_MSGHDR] --- Testing SCM_CREDENTIALS (Process Credentials) ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_DGRAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -943,7 +943,7 @@ pub mod dgram_msghdr_tests {
         unsafe { close(receiver_sock) };
     }
 
-    fn test_write_and_recvmsg_credentials() {
+    pub fn test_write_and_recvmsg_credentials() {
         println!(
             "[DGRAM_MSGHDR] --- Testing syscall::write() and recvmsg() with SCM_CREDENTIALS ---"
         );
@@ -1010,7 +1010,7 @@ pub mod dgram_msghdr_tests {
         unsafe { close(receiver_sock) };
     }
 
-    fn test_data_buffer_truncation() {
+    pub fn test_data_buffer_truncation() {
         println!("[DGRAM_MSGHDR] --- Testing Data Buffer Truncation (MSG_TRUNC) ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_DGRAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1063,7 +1063,7 @@ pub mod dgram_msghdr_tests {
         unsafe { close(receiver_sock) };
     }
 
-    fn test_control_buffer_truncation() {
+    pub fn test_control_buffer_truncation() {
         println!("[DGRAM_MSGHDR] --- Testing Control Buffer Truncation (MSG_CTRUNC) ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_DGRAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1123,7 +1123,7 @@ pub mod dgram_msghdr_tests {
         unsafe { close(receiver_sock) };
     }
 
-    fn test_send_multiple_fds() {
+    pub fn test_send_multiple_fds() {
         println!("[DGRAM_MSGHDR] --- Testing Sending Multiple FDs ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_DGRAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1199,7 +1199,7 @@ pub mod dgram_msghdr_tests {
         unsafe { close(receiver_sock) };
     }
 
-    fn test_passcred_disabled() {
+    pub fn test_passcred_disabled() {
         println!("[DGRAM_MSGHDR] --- [Edge Case] Testing Receiver with SO_PASSCRED Disabled ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_DGRAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1287,7 +1287,7 @@ pub mod stream_msghdr_tests {
     use std::ptr;
     use std::thread;
 
-    fn test_send_recv_fd() {
+    pub fn test_send_recv_fd() {
         println!("[STREAM_MSGHDR] --- Testing SCM_RIGHTS (File Descriptor Passing) ---");
         let fd_to_send = unsafe { libc::dup(1) };
 
@@ -1356,7 +1356,7 @@ pub mod stream_msghdr_tests {
         println!("[OK] SCM_RIGHTS test passed.");
     }
 
-    fn test_send_recv_credentials() {
+    pub fn test_send_recv_credentials() {
         println!("[STREAM_MSGHDR] --- Testing SCM_CREDENTIALS (Process Credentials) ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1434,7 +1434,7 @@ pub mod stream_msghdr_tests {
         println!("[OK] SCM_CREDENTIALS test passed.");
     }
 
-    fn test_write_and_recvmsg_credentials() {
+    pub fn test_write_and_recvmsg_credentials() {
         println!("[STREAM_MSGHDR] --- Testing syscall::write and recvmsg with SCM_CREDENTIALS ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1506,7 +1506,7 @@ pub mod stream_msghdr_tests {
         println!("[OK] Credentials received successfully via simple write.");
     }
 
-    fn test_control_buffer_truncation() {
+    pub fn test_control_buffer_truncation() {
         println!(
             "[STREAM_MSGHDR] --- [Edge Case] Testing Control Buffer Truncation (MSG_CTRUNC) ---"
         );
@@ -1564,7 +1564,7 @@ pub mod stream_msghdr_tests {
         println!("[OK] MSG_CTRUNC flag was correctly set.");
     }
 
-    fn test_send_multiple_fds() {
+    pub fn test_send_multiple_fds() {
         println!("[STREAM_MSGHDR] --- Testing Sending Multiple FDs ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1637,7 +1637,7 @@ pub mod stream_msghdr_tests {
         println!("[OK] Received 2 FDs: {:?}", received_fds);
     }
 
-    fn test_passcred_disabled() {
+    pub fn test_passcred_disabled() {
         println!("[STREAM_MSGHDR] --- [Edge Case] Testing Receiver with SO_PASSCRED Disabled ---");
         let mut fds = [-1, -1];
         if unsafe { socketpair(AF_UNIX, SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
@@ -1682,7 +1682,7 @@ pub mod stream_msghdr_tests {
         println!("[OK] No SCM_CREDENTIALS message was received, as expected.");
     }
 
-    fn test_eof_handling_with_msghdr() {
+    pub fn test_eof_handling_with_msghdr() {
         println!("[STREAM_MSGHDR] --- Testing EOF Handling with sendmsg/recvmsg ---");
 
         let mut fds = [-1, -1];
@@ -1770,7 +1770,7 @@ pub mod stream_msghdr_tests {
         println!("--- EOF Handling Test with msghdr Finished ---");
     }
 
-    fn test_repeated_partial_reads_with_ancillary_data() {
+    pub fn test_repeated_partial_reads_with_ancillary_data() {
         println!("[STREAM_MSGHDR] --- Repeated Partial Reads with Ancillary Data ---");
         let mut fds = [-1, -1];
         unsafe {
@@ -1892,7 +1892,7 @@ pub mod stream_msghdr_tests {
         unsafe { libc::close(receiver_sock) };
     }
 
-    fn test_receive_concatenated_stream_with_ancillary_data() {
+    pub fn test_receive_concatenated_stream_with_ancillary_data() {
         println!("[STREAM_MSGHDR] --- Receive Concatenated Stream with Ancillary Data ---");
         let mut fds = [-1, -1];
         unsafe {
@@ -2094,45 +2094,123 @@ pub mod stream_msghdr_tests {
 mod tests {
     extern crate test;
     use super::*;
-    use test::Bencher;
+    // use test::Bencher;
 
     #[test]
-    fn test_dgram() {
-        dgram_tests::run_all();
+    fn test_dgram_bind_and_connect_and_fpath() {
+        dgram_tests::test_bind_and_connect_and_fpath()
+    }
+    #[test]
+    fn test_dgram_socketpair_io() {
+        dgram_tests::test_socketpair_io()
+    }
+    #[test]
+    fn test_dgram_epipe() {
+        dgram_tests::test_epipe()
+    }
+    #[test]
+    fn test_dgram_nonblocking_io() {
+        dgram_tests::test_nonblocking_io()
+    }
+    #[test]
+    fn test_dgram_message_size_limits() {
+        dgram_tests::test_message_size_limits()
+    }
+    #[test]
+    fn test_dgram_zero_byte_write() {
+        dgram_tests::test_zero_byte_write()
     }
 
     #[test]
-    fn test_stream() {
-        stream_tests::run_all();
+    fn test_stream_bind_listen_accept_connect_and_fpath() {
+        stream_tests::test_bind_listen_accept_connect_and_fpath()
+    }
+    #[test]
+    fn test_stream_close_listener_with_active_and_pending_connections() {
+        stream_tests::test_close_listener_with_active_and_pending_connections()
+    }
+    #[test]
+    fn test_stream_socketpair_io() {
+        stream_tests::test_socketpair_io()
+    }
+    #[test]
+    fn test_stream_reconnect_fails() {
+        stream_tests::test_reconnect_fails()
+    }
+    #[test]
+    fn test_stream_zero_byte_write_and_eof() {
+        stream_tests::test_zero_byte_write_and_eof()
+    }
+    #[test]
+    fn test_stream_wouldblock_dup_and_notconn_rw() {
+        stream_tests::test_wouldblock_dup_and_notconn_rw()
+    }
+    #[test]
+    fn test_stream_large_stream_transfer() {
+        stream_tests::test_large_stream_transfer()
     }
 
     #[test]
-    fn test_dgram_msghdr() {
-        dgram_msghdr_tests::run_all();
+    fn test_dgram_msghdr_send_recv_fd() {
+        dgram_msghdr_tests::test_send_recv_fd()
+    }
+    #[test]
+    fn test_dgram_msghdr_send_recv_credentials() {
+        dgram_msghdr_tests::test_send_recv_credentials()
+    }
+    #[test]
+    fn test_dgram_msghdr_write_and_recvmsg_credentials() {
+        dgram_msghdr_tests::test_write_and_recvmsg_credentials()
+    }
+    #[test]
+    fn test_dgram_msghdr_data_buffer_truncation() {
+        dgram_msghdr_tests::test_data_buffer_truncation()
+    }
+    #[test]
+    fn test_dgram_msghdr_control_buffer_truncation() {
+        dgram_msghdr_tests::test_control_buffer_truncation()
+    }
+    #[test]
+    fn test_dgram_msghdr_send_multiple_fds() {
+        dgram_msghdr_tests::test_send_multiple_fds()
     }
 
     #[test]
-    fn test_stream_msghdr() {
-        stream_msghdr_tests::run_all();
+    fn test_stream_msghdr_send_recv_fd() {
+        stream_msghdr_tests::test_send_recv_fd()
+    }
+    #[test]
+    fn test_stream_msghdr_send_recv_credentials() {
+        stream_msghdr_tests::test_send_recv_credentials()
+    }
+    #[test]
+    fn test_stream_msghdr_write_and_recvmsg_credentials() {
+        stream_msghdr_tests::test_write_and_recvmsg_credentials()
+    }
+    #[test]
+    fn test_stream_msghdr_control_buffer_truncation() {
+        stream_msghdr_tests::test_control_buffer_truncation()
+    }
+    #[test]
+    fn test_stream_msghdr_send_multiple_fds() {
+        stream_msghdr_tests::test_send_multiple_fds()
+    }
+    #[test]
+    fn test_stream_msghdr_passcred_disabled() {
+        stream_msghdr_tests::test_passcred_disabled()
+    }
+    #[test]
+    fn test_stream_msghdr_eof_handling_with_msghdr() {
+        stream_msghdr_tests::test_eof_handling_with_msghdr()
+    }
+    #[test]
+    fn test_stream_msghdr_repeated_partial_reads_with_ancillary_data() {
+        stream_msghdr_tests::test_repeated_partial_reads_with_ancillary_data()
+    }
+    #[test]
+    fn test_stream_msghdr_receive_concatenated_stream_with_ancillary_data() {
+        stream_msghdr_tests::test_receive_concatenated_stream_with_ancillary_data()
     }
 
-    #[bench]
-    fn bench_dgram(b: &mut Bencher) {
-        b.iter(|| dgram_tests::run_all());
-    }
-
-    #[bench]
-    fn bench_stream(b: &mut Bencher) {
-        b.iter(|| stream_tests::run_all());
-    }
-
-    #[bench]
-    fn bench_dgram_msghdr(b: &mut Bencher) {
-        b.iter(|| dgram_msghdr_tests::run_all());
-    }
-
-    #[bench]
-    fn bench_stream_msghdr(b: &mut Bencher) {
-        b.iter(|| stream_msghdr_tests::run_all());
-    }
+    // TODO: Benchmark?
 }

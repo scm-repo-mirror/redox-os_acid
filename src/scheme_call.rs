@@ -23,11 +23,11 @@ impl SchemeSync for SchemeTestCall {
     }
     fn openat(
         &mut self,
-        fd: usize,
-        path: &str,
-        flags: usize,
-        fcntl_flags: u32,
-        ctx: &CallerCtx,
+        _fd: usize,
+        _path: &str,
+        _flags: usize,
+        _fcntl_flags: u32,
+        _ctx: &CallerCtx,
     ) -> Result<OpenResult> {
         println!("CALLED SYS_OPEN");
         Ok(OpenResult::ThisScheme {
@@ -40,7 +40,7 @@ impl SchemeSync for SchemeTestCall {
         id: usize,
         payload: &mut [u8],
         metadata: &[u64],
-        ctx: &CallerCtx, // Only pid and id are correct here, uid/gid are not used
+        _ctx: &CallerCtx, // Only pid and id are correct here, uid/gid are not used
     ) -> Result<usize> {
         println!("CALLED SYS_CALL, ID {id} payload {payload:?} metadata {metadata:?}");
         payload[0] += metadata[0] as u8;
@@ -49,7 +49,7 @@ impl SchemeSync for SchemeTestCall {
 }
 
 pub fn scheme_call() {
-    Daemon::new(move |ready| {
+    let _ = Daemon::new(move |ready| {
         let sock = Socket::create().unwrap(); // "test-scheme"
         let mut scheme = SchemeTestCall {};
         ready.ready().unwrap();
@@ -100,11 +100,11 @@ impl SchemeSync for SchemeTestHeadTail {
     }
     fn openat(
         &mut self,
-        fd: usize,
-        path: &str,
-        flags: usize,
-        fcntl_flags: u32,
-        ctx: &CallerCtx,
+        _fd: usize,
+        _path: &str,
+        _flags: usize,
+        _fcntl_flags: u32,
+        _ctx: &CallerCtx,
     ) -> Result<OpenResult> {
         Ok(OpenResult::ThisScheme {
             number: 0,
@@ -202,9 +202,9 @@ enum Case {
 fn scheme_data_leak_test_inner(case: Case) {
     let _guard;
     let scheme = move |daemon: Option<Daemon>| {
-        let sock = Socket::create().unwrap(); // "schemeleak"
+        let sock = Socket::create().unwrap();
         let scheme = RefCell::new(SchemeTestHeadTail(case));
-        register_sync_scheme(&sock, "schemeleak", &mut *scheme.borrow_mut());
+        register_sync_scheme(&sock, "schemeleak", &mut *scheme.borrow_mut()).unwrap();
         if let Some(d) = daemon {
             d.ready().unwrap();
         }
@@ -287,11 +287,11 @@ impl SchemeSync for RedirectScheme {
     }
     fn openat(
         &mut self,
-        fd: usize,
+        _fd: usize,
         path: &str,
         flags: usize,
-        fcntl_flags: u32,
-        ctx: &CallerCtx,
+        _fcntl_flags: u32,
+        _ctx: &CallerCtx,
     ) -> Result<OpenResult> {
         let fd = libredox::call::open(path, (flags as i32) | O_CLOEXEC, 0).unwrap();
         Ok(OpenResult::OtherScheme { fd })
@@ -304,11 +304,11 @@ impl SchemeSync for DupScheme {
     }
     fn openat(
         &mut self,
-        fd: usize,
+        _fd: usize,
         path: &str,
-        flags: usize,
-        fcntl_flags: u32,
-        ctx: &CallerCtx,
+        _flags: usize,
+        _fcntl_flags: u32,
+        _ctx: &CallerCtx,
     ) -> Result<OpenResult> {
         if !path.is_empty() {
             return Err(Error::new(ENOENT));
@@ -377,7 +377,7 @@ pub fn libc_call() {
     // benchmarking
 
     // Same number with sys_call of arch/syscall.rs
-    const N: usize = 1 << 16;
+    const N: usize = 1 << 10;
 
     for _ in 0..N {
         assert_ne!(unsafe { libc::getppid() }, -1);
@@ -392,11 +392,11 @@ mod tests {
 
     #[bench]
     fn bench_libc_call(b: &mut Bencher) {
-        libc_call()
+        b.iter(|| libc_call())
     }
 
     #[bench]
-    fn test_scheme_calll(b: &mut Bencher) {
-        scheme_call()
+    fn bench_scheme_call(b: &mut Bencher) {
+        b.iter(|| scheme_call())
     }
 }
