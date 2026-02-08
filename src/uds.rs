@@ -13,6 +13,7 @@ fn socket_kind(mut kind: libc::c_int) -> (libc::c_int, usize) {
 
 const SCM_RIGHTS: i32 = 1;
 const SCM_CREDENTIALS: i32 = 2;
+const MSG_CMSG_CLOEXEC: i32 = 0x40000000;
 
 const PATH_MAX: usize = 4096;
 
@@ -773,7 +774,7 @@ pub mod stream_tests {
 /// Tests for advanced msghdr functionality on DGRAM sockets (SCM_RIGHTS, SCM_CREDENTIALS)
 ///
 pub mod dgram_msghdr_tests {
-    use super::{Ucred, SCM_CREDENTIALS, SCM_RIGHTS};
+    use super::{Ucred, MSG_CMSG_CLOEXEC, SCM_CREDENTIALS, SCM_RIGHTS};
     use libc::{
         c_int, c_void, close, cmsghdr, iovec, msghdr, recvmsg, sendmsg, socketpair, AF_UNIX,
         CMSG_DATA, CMSG_FIRSTHDR, CMSG_LEN, CMSG_NXTHDR, CMSG_SPACE, MSG_CTRUNC, MSG_TRUNC,
@@ -1199,6 +1200,89 @@ pub mod dgram_msghdr_tests {
         unsafe { close(receiver_sock) };
     }
 
+    pub fn test_send_multiple_fds_cloexec() {
+        println!("[DGRAM_MSGHDR] --- Testing Sending Multiple FDs with MSG_CMSG_CLOEXEC ---");
+        let mut fds = [-1, -1];
+        if unsafe { socketpair(AF_UNIX, SOCK_DGRAM, 0, fds.as_mut_ptr()) } != 0 {
+            panic!("libc err {}", io::Error::last_os_error());
+        }
+        let (receiver_sock, sender_sock) = (fds[0], fds[1]);
+
+        let fd1 = unsafe { libc::dup(0) }; // stdin
+        let fd2 = unsafe { libc::dup(1) }; // stdout
+        let fds_to_send: [c_int; 2] = [fd1, fd2];
+        println!("[Sender] Sending two FDs: {} and {}", fd1, fd2);
+
+        let handle = thread::spawn(move || {
+            let data_to_send = "two fds";
+            let mut iov = iovec {
+                iov_base: data_to_send.as_ptr() as *mut c_void,
+                iov_len: data_to_send.len(),
+            };
+            let cmsg_buf_len = unsafe { CMSG_SPACE(mem::size_of::<[c_int; 2]>() as u32) as usize };
+            let mut cmsg_buf = vec![0u8; cmsg_buf_len];
+            let mut msg: msghdr = unsafe { mem::zeroed() };
+            msg.msg_iov = &mut iov;
+            msg.msg_iovlen = 1;
+            msg.msg_control = cmsg_buf.as_mut_ptr() as *mut c_void;
+            msg.msg_controllen = cmsg_buf_len;
+
+            unsafe {
+                let cmsg = CMSG_FIRSTHDR(&msg);
+                (*cmsg).cmsg_level = SOL_SOCKET;
+                (*cmsg).cmsg_type = SCM_RIGHTS;
+                (*cmsg).cmsg_len = CMSG_LEN(mem::size_of::<[c_int; 2]>() as u32) as usize;
+                let fds_ptr = CMSG_DATA(cmsg) as *mut c_int;
+                ptr::copy_nonoverlapping(fds_to_send.as_ptr(), fds_ptr, 2);
+            }
+
+            unsafe { sendmsg(sender_sock, &msg, 0) };
+            unsafe { close(sender_sock) };
+        });
+
+        let mut data_buf = [0u8; 16];
+        let mut iov = iovec {
+            iov_base: data_buf.as_mut_ptr() as *mut c_void,
+            iov_len: data_buf.len(),
+        };
+        let cmsg_buf_len = unsafe { CMSG_SPACE(mem::size_of::<[c_int; 2]>() as u32) as usize };
+        let mut cmsg_buf = vec![0u8; cmsg_buf_len];
+        let mut msg: msghdr = unsafe { mem::zeroed() };
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = cmsg_buf.as_mut_ptr() as *mut c_void;
+        msg.msg_controllen = cmsg_buf.len();
+
+        unsafe { recvmsg(receiver_sock, &mut msg, MSG_CMSG_CLOEXEC) };
+
+        let mut received_fds = Vec::new();
+        unsafe {
+            let mut cmsg = CMSG_FIRSTHDR(&msg);
+            while !cmsg.is_null() {
+                if (*cmsg).cmsg_level == SOL_SOCKET && (*cmsg).cmsg_type == SCM_RIGHTS {
+                    let num_fds =
+                        ((*cmsg).cmsg_len - CMSG_LEN(0) as usize) / mem::size_of::<c_int>();
+                    let data_ptr = CMSG_DATA(cmsg) as *const c_int;
+                    received_fds.extend_from_slice(std::slice::from_raw_parts(data_ptr, num_fds));
+                }
+                cmsg = CMSG_NXTHDR(&msg, cmsg);
+            }
+        }
+
+        assert_eq!(received_fds.len(), 2);
+        for fd in received_fds.iter() {
+            let flags = syscall::fcntl(*fd as usize, syscall::F_GETFD, 0).unwrap();
+            assert_eq!(flags & syscall::O_CLOEXEC, syscall::O_CLOEXEC)
+        }
+        println!(
+            "[OK] Received 2 FDs: {:?}, which are valid and correctly set MSG_CMSG_CLOEXEC.",
+            received_fds
+        );
+
+        handle.join().unwrap();
+        unsafe { close(receiver_sock) };
+    }
+
     pub fn test_passcred_disabled() {
         println!("[DGRAM_MSGHDR] --- [Edge Case] Testing Receiver with SO_PASSCRED Disabled ---");
         let mut fds = [-1, -1];
@@ -1266,6 +1350,7 @@ pub mod dgram_msghdr_tests {
         test_data_buffer_truncation();
         test_control_buffer_truncation();
         test_send_multiple_fds();
+        test_send_multiple_fds_cloexec();
         test_passcred_disabled();
         println!("[DGRAM_MSGHDR] All msghdr tests finished successfully.");
     }
@@ -1275,11 +1360,11 @@ pub mod dgram_msghdr_tests {
 /// Tests for advanced msghdr functionality on STREAM sockets (SCM_RIGHTS, SCM_CREDENTIALS)
 ///
 pub mod stream_msghdr_tests {
-    use super::{Ucred, SCM_CREDENTIALS, SCM_RIGHTS};
+    use super::{Ucred, MSG_CMSG_CLOEXEC, SCM_CREDENTIALS, SCM_RIGHTS};
     use libc::{
         c_int, c_void, close, cmsghdr, iovec, msghdr, recvmsg, sendmsg, socketpair, AF_UNIX,
-        CMSG_DATA, CMSG_FIRSTHDR, CMSG_LEN, CMSG_SPACE, MSG_CTRUNC, SOCK_STREAM, SOL_SOCKET,
-        SO_PASSCRED,
+        CMSG_DATA, CMSG_FIRSTHDR, CMSG_LEN, CMSG_NXTHDR, CMSG_SPACE, MSG_CTRUNC, SOCK_STREAM,
+        SOL_SOCKET, SO_PASSCRED,
     };
     use std::io;
     use std::mem;
@@ -1635,6 +1720,90 @@ pub mod stream_msghdr_tests {
         handle.join().unwrap();
         unsafe { close(receiver_sock) };
         println!("[OK] Received 2 FDs: {:?}", received_fds);
+    }
+
+    pub fn test_send_multiple_fds_cloexec() {
+        println!("[STREAM_MSGHDR] --- Testing Sending Multiple FDs with MSG_CMSG_CLOEXEC ---");
+        let mut fds = [-1, -1];
+        if unsafe { socketpair(AF_UNIX, SOCK_STREAM, 0, fds.as_mut_ptr()) } != 0 {
+            panic!("libc err {}", io::Error::last_os_error());
+        }
+        let (receiver_sock, sender_sock) = (fds[0], fds[1]);
+
+        let fd1 = unsafe { libc::dup(0) }; // stdin
+        let fd2 = unsafe { libc::dup(1) }; // stdout
+        let fds_to_send: [c_int; 2] = [fd1, fd2];
+
+        let handle = thread::spawn(move || {
+            let data_to_send = "two fds";
+            let mut iov = iovec {
+                iov_base: data_to_send.as_ptr() as *mut c_void,
+                iov_len: data_to_send.len(),
+            };
+            let cmsg_buf_len = unsafe { CMSG_SPACE((mem::size_of::<c_int>() * 2) as u32) as usize };
+            let mut cmsg_buf = vec![0u8; cmsg_buf_len];
+            let mut msg: msghdr = unsafe { mem::zeroed() };
+            msg.msg_iov = &mut iov;
+            msg.msg_iovlen = 1;
+            msg.msg_control = cmsg_buf.as_mut_ptr() as *mut c_void;
+            msg.msg_controllen = cmsg_buf_len;
+
+            unsafe {
+                let cmsg = CMSG_FIRSTHDR(&msg);
+                (*cmsg).cmsg_level = SOL_SOCKET;
+                (*cmsg).cmsg_type = SCM_RIGHTS;
+                (*cmsg).cmsg_len = CMSG_LEN((mem::size_of::<c_int>() * 2) as u32) as usize;
+                ptr::copy_nonoverlapping(fds_to_send.as_ptr(), CMSG_DATA(cmsg) as *mut c_int, 2);
+            }
+
+            if unsafe { sendmsg(sender_sock, &msg, 0) } < 0 {
+                panic!("libc err {}", io::Error::last_os_error());
+            }
+            unsafe { close(sender_sock) };
+        });
+
+        let mut data_buf = [0u8; 16];
+        let mut iov = iovec {
+            iov_base: data_buf.as_mut_ptr() as *mut c_void,
+            iov_len: data_buf.len(),
+        };
+        let cmsg_buf_len = unsafe { CMSG_SPACE((mem::size_of::<c_int>() * 2) as u32) as usize };
+        let mut cmsg_buf = vec![0u8; cmsg_buf_len];
+        let mut msg: msghdr = unsafe { mem::zeroed() };
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = cmsg_buf.as_mut_ptr() as *mut c_void;
+        msg.msg_controllen = cmsg_buf.len();
+
+        if unsafe { recvmsg(receiver_sock, &mut msg, MSG_CMSG_CLOEXEC) } < 0 {
+            panic!("libc err {}", io::Error::last_os_error());
+        }
+
+        let mut received_fds = Vec::new();
+        unsafe {
+            let mut cmsg = CMSG_FIRSTHDR(&msg);
+            while !cmsg.is_null() {
+                if (*cmsg).cmsg_level == SOL_SOCKET && (*cmsg).cmsg_type == SCM_RIGHTS {
+                    let data_ptr = CMSG_DATA(cmsg) as *const c_int;
+                    let num_fds =
+                        ((*cmsg).cmsg_len - CMSG_LEN(0) as usize) / mem::size_of::<c_int>();
+                    received_fds.extend_from_slice(std::slice::from_raw_parts(data_ptr, num_fds));
+                }
+                cmsg = CMSG_NXTHDR(&msg, cmsg);
+            }
+        }
+
+        assert_eq!(received_fds.len(), 2);
+        for fd in received_fds.iter() {
+            let flags = syscall::fcntl(*fd as usize, syscall::F_GETFD, 0).unwrap();
+            assert_eq!(flags & syscall::O_CLOEXEC, syscall::O_CLOEXEC)
+        }
+        handle.join().unwrap();
+        unsafe { close(receiver_sock) };
+        println!(
+            "[OK] Received 2 FDs: {:?} and correctly set MSG_CMSG_CLOEXEC",
+            received_fds
+        );
     }
 
     pub fn test_passcred_disabled() {
@@ -2082,6 +2251,7 @@ pub mod stream_msghdr_tests {
         test_write_and_recvmsg_credentials();
         test_control_buffer_truncation();
         test_send_multiple_fds();
+        test_send_multiple_fds_cloexec();
         test_passcred_disabled();
         test_eof_handling_with_msghdr();
         test_repeated_partial_reads_with_ancillary_data();
